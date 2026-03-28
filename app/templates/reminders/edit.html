@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{% if reminder %}Edit Reminder{% else %}New Reminder{% endif %} — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/reminders" class="back-link" aria-label="Back to reminders">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Reminders
+  </a>
+  <h1 class="page-title">{% if reminder %}Edit Reminder{% else %}New Reminder{% endif %}</h1>
+</div>
+
+<div class="card form-card">
+  <div class="card-body">
+    <form
+      method="post"
+      action="{{ '/reminders/' + reminder.id|string + '/edit' if reminder else '/reminders/new' }}"
+      class="reminder-edit-form"
+      novalidate
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Title -->
+      <div class="form-group">
+        <label for="reminder-title" class="form-label">
+          Reminder <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="reminder-title"
+          name="title"
+          class="form-input form-input-lg"
+          placeholder="Remind me to..."
+          required
+          autofocus
+          value="{{ reminder.title if reminder else '' }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <!-- Remind At -->
+      <div class="form-group">
+        <label for="reminder-at" class="form-label">
+          When <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="datetime-local"
+          id="reminder-at"
+          name="remind_at"
+          class="form-input"
+          required
+          value="{{ reminder.remind_at.strftime('%Y-%m-%dT%H:%M') if reminder and reminder.remind_at else '' }}"
+        >
+        <!-- Quick time presets -->
+        <div class="time-presets" aria-label="Quick time options">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="setRemindAt(15)">+15 min</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="setRemindAt(60)">+1 hour</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="setRemindAt(480)">+8 hours</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="setRemindAtTomorrow()">Tomorrow 9am</button>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label for="reminder-notes" class="form-label">Notes (optional)</label>
+        <textarea
+          id="reminder-notes"
+          name="notes"
+          class="form-textarea"
+          rows="3"
+          placeholder="Additional details..."
+        >{{ reminder.notes if reminder and reminder.notes else '' }}</textarea>
+      </div>
+
+      <!-- Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if reminder %}Save Changes{% else %}Set Reminder{% endif %}
+        </button>
+        <a href="/reminders" class="btn btn-ghost">Cancel</a>
+        {% if reminder %}
+          <button
+            type="button"
+            class="btn btn-danger btn-icon-text"
+            hx-post="/reminders/{{ reminder.id }}/delete"
+            hx-confirm="Delete this reminder?"
+            hx-include="[name=csrf_token]"
+            hx-on::after-request="window.location.href='/reminders'"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 4.5h9M6 4.5V3h4v1.5M7 7v4M9 7v4M4.5 4.5l.5 8h6l.5-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Delete
+          </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if reminder %}
+  <div class="metadata-card">
+    <dl class="metadata-list">
+      <div class="metadata-item">
+        <dt>Status</dt>
+        <dd>{{ reminder.status | capitalize }}</dd>
+      </div>
+      <div class="metadata-item">
+        <dt>Created</dt>
+        <dd>{{ reminder.created_at | format_datetime }}</dd>
+      </div>
+    </dl>
+  </div>
+{% endif %}
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setRemindAt(minutesFromNow) {
+    var input = document.getElementById('reminder-at');
+    if (!input) return;
+    var d = new Date(Date.now() + minutesFromNow * 60 * 1000);
+    // Format to datetime-local value (YYYY-MM-DDTHH:MM)
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    input.value = d.getFullYear() + '-' +
+      pad(d.getMonth() + 1) + '-' +
+      pad(d.getDate()) + 'T' +
+      pad(d.getHours()) + ':' +
+      pad(d.getMinutes());
+  }
+
+  function setRemindAtTomorrow() {
+    var input = document.getElementById('reminder-at');
+    if (!input) return;
+    var d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    input.value = d.getFullYear() + '-' +
+      pad(d.getMonth() + 1) + '-' +
+      pad(d.getDate()) + 'T09:00';
+  }
+
+  // Pre-fill datetime if creating new and URL has a time param
+  document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('reminder-at');
+    if (input && !input.value) {
+      setRemindAt(60); // Default to 1 hour from now
+    }
+  });
+</script>
+{% endblock %}

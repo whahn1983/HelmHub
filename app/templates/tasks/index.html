@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Tasks</h1>
+  <button
+    class="btn btn-primary"
+    onclick="toggleInlineForm()"
+    aria-expanded="false"
+    aria-controls="inline-task-form"
+    id="add-task-toggle"
+  >
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    Add Task
+  </button>
+</div>
+
+<!-- Inline Task Creation Form (collapsible) -->
+<div class="inline-form-container" id="inline-task-form" hidden>
+  <div class="card">
+    <div class="card-body">
+      <form
+        hx-post="/tasks/new"
+        hx-target="#task-list"
+        hx-swap="afterbegin"
+        hx-on::after-request="clearInlineForm(event)"
+        class="task-create-form"
+        novalidate
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+          <label for="new-task-title" class="form-label">Task title <span aria-hidden="true">*</span></label>
+          <input
+            type="text"
+            id="new-task-title"
+            name="title"
+            class="form-input"
+            placeholder="What needs to be done?"
+            required
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-task-priority" class="form-label">Priority</label>
+            <select id="new-task-priority" name="priority" class="form-select">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-task-due-date" class="form-label">Due date</label>
+            <input type="date" id="new-task-due-date" name="due_date" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="new-task-due-time" class="form-label">Due time</label>
+            <input type="time" id="new-task-due-time" name="due_time" class="form-input">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="new-task-notes" class="form-label">Notes (optional)</label>
+          <textarea id="new-task-notes" name="notes" class="form-textarea" rows="2" placeholder="Additional details..."></textarea>
+        </div>
+        <div class="form-group form-group-inline">
+          <label class="checkbox-label">
+            <input type="checkbox" name="pinned" id="new-task-pinned" class="checkbox-input">
+            <span class="checkbox-custom" aria-hidden="true"></span>
+            <span class="checkbox-text">Pin this task</span>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Add Task</button>
+          <button type="button" class="btn btn-ghost" onclick="toggleInlineForm()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- View Tabs -->
+<div class="view-tabs" role="tablist" aria-label="Task views">
+  <a
+    href="/tasks"
+    class="view-tab {% if not view or view == 'all' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if not view or view == 'all' else 'false' }}"
+  >All</a>
+  <a
+    href="/tasks?view=today"
+    class="view-tab {% if view == 'today' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'today' else 'false' }}"
+  >Today</a>
+  <a
+    href="/tasks?view=upcoming"
+    class="view-tab {% if view == 'upcoming' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'upcoming' else 'false' }}"
+  >Upcoming</a>
+  <a
+    href="/tasks?view=overdue"
+    class="view-tab {% if view == 'overdue' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'overdue' else 'false' }}"
+  >
+    Overdue
+    {% if overdue_count is defined and overdue_count > 0 %}
+      <span class="tab-badge badge-danger">{{ overdue_count }}</span>
+    {% endif %}
+  </a>
+  <a
+    href="/tasks?view=completed"
+    class="view-tab {% if view == 'completed' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'completed' else 'false' }}"
+  >Completed</a>
+</div>
+
+<!-- Search Bar -->
+<div class="search-bar-container">
+  <div class="search-input-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <input
+      type="search"
+      name="q"
+      id="task-search"
+      class="form-input search-input"
+      placeholder="Search tasks..."
+      value="{{ search_query or '' }}"
+      hx-get="/tasks"
+      hx-trigger="keyup delay:300ms, search"
+      hx-target="#task-list"
+      hx-swap="innerHTML"
+      hx-include="[name=view_hidden]"
+      autocomplete="off"
+      aria-label="Search tasks"
+    >
+    <input type="hidden" name="view_hidden" value="{{ view or '' }}">
+  </div>
+</div>
+
+<!-- Task List -->
+<div id="task-list" class="task-list-container" aria-live="polite" aria-label="Task list">
+  {% if tasks %}
+    {% for task in tasks %}
+      {% include "tasks/task_item.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+        <path d="M16 24l6 6 10-12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+      </svg>
+      <p class="empty-state-title">
+        {% if view == 'completed' %}No completed tasks yet{% elif view == 'overdue' %}No overdue tasks — great job!{% elif view == 'today' %}Nothing due today{% elif view == 'upcoming' %}No upcoming tasks{% else %}No tasks yet{% endif %}
+      </p>
+      <p class="empty-state-body">
+        {% if view == 'completed' %}Complete some tasks to see them here.{% elif view == 'overdue' %}All tasks are on track.{% else %}Add your first task to get started.{% endif %}
+      </p>
+      {% if view != 'completed' and view != 'overdue' %}
+        <button class="btn btn-primary" onclick="toggleInlineForm()">Add Task</button>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function toggleInlineForm() {
+    var form = document.getElementById('inline-task-form');
+    var toggle = document.getElementById('add-task-toggle');
+    var isHidden = form.hidden;
+    form.hidden = !isHidden;
+    toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    if (isHidden) {
+      var firstInput = form.querySelector('input:not([type=hidden])');
+      if (firstInput) firstInput.focus();
+    }
+  }
+
+  function clearInlineForm(event) {
+    if (event.detail && event.detail.successful) {
+      var form = document.querySelector('.task-create-form');
+      if (form) form.reset();
+    }
+  }
+</script>
+{% endblock %}

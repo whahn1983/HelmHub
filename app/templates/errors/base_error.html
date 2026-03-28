@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>{% block title %}Error{% endblock %} — HelmHub</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <style>
+    .error-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .error-code {
+      font-size: 5rem;
+      font-weight: 800;
+      color: var(--accent-blue);
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    .error-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+    }
+    .error-desc {
+      color: var(--text-secondary);
+      margin-bottom: 2rem;
+      max-width: 400px;
+    }
+  </style>
+</head>
+<body class="theme-system">
+  <div class="error-page">
+    <div class="error-code">{% block code %}{% endblock %}</div>
+    <div class="error-title">{% block heading %}Error{% endblock %}</div>
+    <p class="error-desc">{% block description %}Something went wrong.{% endblock %}</p>
+    <a href="/" class="btn btn-primary">Go Home</a>
+  </div>
+  <script>
+    const theme = localStorage.getItem('theme') || 'system';
+    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.body.className = 'theme-dark';
+    } else {
+      document.body.className = 'theme-light';
+    }
+  </script>
+</body>
+</html>

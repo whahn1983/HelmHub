@@ -1,0 +1,70 @@
+<div class="task-item {% if task.is_overdue %}overdue{% endif %} {% if task.pinned %}pinned{% endif %}" id="task-{{ task.id }}">
+  <span class="task-priority priority-{{ task.priority }}" aria-label="{{ task.priority }} priority" title="{{ task.priority }} priority"></span>
+  <div class="task-content">
+    <span class="task-title {% if task.status == 'completed' %}completed{% endif %}">
+      {% if task.pinned %}
+        <svg class="pin-icon" width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-label="Pinned" title="Pinned">
+          <path d="M9 1L8 4.5l1 1-2 2-1.5-1.5-3 3-.75.75-.75-.75.75-.75 3-3L3.5 4l2-2 1 1L9 1z"/>
+        </svg>
+      {% endif %}
+      {{ task.title }}
+    </span>
+    {% if task.due_at %}
+      <span class="task-due {% if task.is_overdue %}overdue-text{% endif %}">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M6 3v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        {{ task.due_at | format_datetime }}
+      </span>
+    {% endif %}
+    {% if task.notes %}
+      <span class="task-notes-preview">{{ task.notes | truncate(60) }}</span>
+    {% endif %}
+  </div>
+  <div class="task-actions">
+    <!-- Complete button -->
+    <button
+      hx-post="/tasks/{{ task.id }}/complete"
+      hx-target="#task-{{ task.id }}"
+      hx-swap="outerHTML"
+      hx-include="[name=csrf_token]"
+      class="btn-icon btn-complete {% if task.status == 'completed' %}completed{% endif %}"
+      aria-label="{% if task.status == 'completed' %}Mark incomplete{% else %}Mark complete{% endif %}"
+      title="{% if task.status == 'completed' %}Mark incomplete{% else %}Mark complete{% endif %}"
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+        {% if task.status == 'completed' %}
+          <path d="M6.5 10l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        {% endif %}
+      </svg>
+    </button>
+    <!-- Edit button -->
+    <a
+      href="/tasks/{{ task.id }}/edit"
+      class="btn-icon"
+      aria-label="Edit task"
+      title="Edit"
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M14 3.5l2.5 2.5L7 15.5H4.5V13L14 3.5z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+    <!-- Delete button -->
+    <button
+      hx-post="/tasks/{{ task.id }}/delete"
+      hx-target="#task-{{ task.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete this task?"
+      hx-include="[name=csrf_token]"
+      class="btn-icon btn-danger"
+      aria-label="Delete task"
+      title="Delete"
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M5 6h10M8 6V4h4v2M9 9v5M11 9v5M6 6l.75 10h6.5L14 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+</div>

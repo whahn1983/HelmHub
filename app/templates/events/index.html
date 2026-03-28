@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Events — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Events</h1>
+  <a href="/events/new" class="btn btn-primary" aria-label="Add event">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    Add Event
+  </a>
+</div>
+
+<!-- View Tabs -->
+<div class="view-tabs" role="tablist" aria-label="Event views">
+  <a
+    href="/events?view=today"
+    class="view-tab {% if not view or view == 'today' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if not view or view == 'today' else 'false' }}"
+  >Today</a>
+  <a
+    href="/events?view=upcoming"
+    class="view-tab {% if view == 'upcoming' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'upcoming' else 'false' }}"
+  >Upcoming</a>
+  <a
+    href="/events?view=all"
+    class="view-tab {% if view == 'all' %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if view == 'all' else 'false' }}"
+  >All</a>
+</div>
+
+<!-- Events List grouped by date -->
+<div id="events-list" class="events-list-container" aria-live="polite">
+  {% if grouped_events %}
+    {% for date_label, day_events in grouped_events.items() %}
+      <section class="events-day-group" aria-labelledby="day-{{ loop.index }}">
+        <h2 class="events-day-header" id="day-{{ loop.index }}">
+          {{ date_label }}
+          <span class="events-day-count">{{ day_events | length }} event{{ 's' if day_events | length != 1 }}</span>
+        </h2>
+        <ul class="events-day-list" role="list">
+          {% for event in day_events %}
+            <li class="event-item {% if event.is_now %}event-now{% endif %}" id="event-{{ event.id }}">
+              <!-- Time block -->
+              <div class="event-time-block" aria-label="Event time">
+                {% if event.start_at %}
+                  <span class="event-time-start">{{ event.start_at | format_time }}</span>
+                  {% if event.end_at %}
+                    <span class="event-time-divider" aria-hidden="true">—</span>
+                    <span class="event-time-end">{{ event.end_at | format_time }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="event-time-allday">All day</span>
+                {% endif %}
+              </div>
+
+              <!-- Event details -->
+              <div class="event-details">
+                <div class="event-header-row">
+                  <span class="event-title">{{ event.title }}</span>
+                  {% if event.is_now %}
+                    <span class="badge badge-success badge-sm">Now</span>
+                  {% endif %}
+                </div>
+                {% if event.location %}
+                  <span class="event-location">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                      <path d="M6.5 1.5C4.57 1.5 3 3.07 3 5c0 2.625 3.5 6.5 3.5 6.5S10 7.625 10 5c0-1.93-1.57-3.5-3.5-3.5z" stroke="currentColor" stroke-width="1.25"/>
+                      <circle cx="6.5" cy="5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
+                    </svg>
+                    {{ event.location }}
+                  </span>
+                {% endif %}
+                {% if event.notes %}
+                  <p class="event-notes-preview">{{ event.notes | truncate(120) }}</p>
+                {% endif %}
+              </div>
+
+              <!-- Actions -->
+              <div class="event-actions">
+                <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit event" title="Edit">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </a>
+                <button
+                  hx-post="/events/{{ event.id }}/delete"
+                  hx-target="#event-{{ event.id }}"
+                  hx-swap="outerHTML"
+                  hx-confirm="Delete this event?"
+                  hx-include="[name=csrf_token]"
+                  class="btn-icon btn-danger"
+                  aria-label="Delete event"
+                  title="Delete"
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  {% elif events %}
+    <!-- Flat list fallback if not grouped -->
+    <ul class="events-day-list" role="list">
+      {% for event in events %}
+        <li class="event-item {% if event.is_now %}event-now{% endif %}" id="event-{{ event.id }}">
+          <div class="event-time-block">
+            {% if event.start_at %}
+              <span class="event-time-start">{{ event.start_at | format_datetime }}</span>
+              {% if event.end_at %}
+                <span class="event-time-divider" aria-hidden="true">—</span>
+                <span class="event-time-end">{{ event.end_at | format_time }}</span>
+              {% endif %}
+            {% else %}
+              <span class="event-time-allday">All day</span>
+            {% endif %}
+          </div>
+          <div class="event-details">
+            <span class="event-title">{{ event.title }}</span>
+            {% if event.location %}
+              <span class="event-location">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <path d="M6.5 1.5C4.57 1.5 3 3.07 3 5c0 2.625 3.5 6.5 3.5 6.5S10 7.625 10 5c0-1.93-1.57-3.5-3.5-3.5z" stroke="currentColor" stroke-width="1.25"/>
+                  <circle cx="6.5" cy="5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
+                </svg>
+                {{ event.location }}
+              </span>
+            {% endif %}
+          </div>
+          <div class="event-actions">
+            <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            <button
+              hx-post="/events/{{ event.id }}/delete"
+              hx-target="#event-{{ event.id }}"
+              hx-swap="outerHTML"
+              hx-confirm="Delete this event?"
+              hx-include="[name=csrf_token]"
+              class="btn-icon btn-danger"
+              aria-label="Delete"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <rect x="6" y="8" width="36" height="34" rx="4" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+        <path d="M16 4v8M32 4v8M6 20h36" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+      </svg>
+      <p class="empty-state-title">
+        {% if view == 'today' %}Nothing scheduled today{% elif view == 'upcoming' %}No upcoming events{% else %}No events{% endif %}
+      </p>
+      <p class="empty-state-body">Schedule events to keep track of your commitments.</p>
+      <a href="/events/new" class="btn btn-primary">Add an Event</a>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}

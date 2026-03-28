@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Settings</h1>
+  <!-- Save result indicator -->
+  <div id="settings-save-result" aria-live="polite" aria-atomic="true" class="save-result-indicator"></div>
+</div>
+
+<form
+  hx-post="/settings"
+  hx-swap="none"
+  hx-on::after-request="onSettingsSaved(event)"
+  class="settings-form"
+  novalidate
+>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <!-- Section 1: Appearance -->
+  <section class="settings-section card" aria-labelledby="section-appearance">
+    <div class="card-header">
+      <h2 class="section-title" id="section-appearance">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.93 4.93l1.41 1.41M11.66 11.66l1.41 1.41M4.93 13.07l1.41-1.41M11.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Appearance
+      </h2>
+    </div>
+    <div class="card-body">
+
+      <!-- Theme -->
+      <fieldset class="settings-field">
+        <legend class="form-label">Theme</legend>
+        <div class="radio-group" role="radiogroup">
+          <label class="radio-option">
+            <input
+              type="radio"
+              name="theme"
+              value="light"
+              class="radio-input"
+              {% if user_settings and user_settings.theme == 'light' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Light
+            </span>
+          </label>
+          <label class="radio-option">
+            <input
+              type="radio"
+              name="theme"
+              value="dark"
+              class="radio-input"
+              {% if user_settings and user_settings.theme == 'dark' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M17 12.2A8 8 0 017.8 3 8 8 0 1017 12.2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              Dark
+            </span>
+          </label>
+          <label class="radio-option">
+            <input
+              type="radio"
+              name="theme"
+              value="system"
+              class="radio-input"
+              {% if not user_settings or user_settings.theme == 'system' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2" y="3" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M7 18h6M10 14v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+              System
+            </span>
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Time Format -->
+      <fieldset class="settings-field">
+        <legend class="form-label">Time format</legend>
+        <div class="radio-group" role="radiogroup">
+          <label class="radio-option">
+            <input
+              type="radio"
+              name="time_format"
+              value="12"
+              class="radio-input"
+              {% if user_settings and user_settings.time_format == '12' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">12-hour <span class="radio-example">(3:00 PM)</span></span>
+          </label>
+          <label class="radio-option">
+            <input
+              type="radio"
+              name="time_format"
+              value="24"
+              class="radio-input"
+              {% if not user_settings or user_settings.time_format == '24' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">24-hour <span class="radio-example">(15:00)</span></span>
+          </label>
+        </div>
+      </fieldset>
+
+    </div>
+  </section>
+
+  <!-- Section 2: Dashboard Widgets -->
+  <section class="settings-section card" aria-labelledby="section-dashboard">
+    <div class="card-header">
+      <h2 class="section-title" id="section-dashboard">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="1" y="1" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="10.5" y="1" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="1" y="10.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="10.5" y="10.5" width="6.5" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        Dashboard Widgets
+      </h2>
+    </div>
+    <div class="card-body">
+      <p class="settings-description">Choose which cards appear on your dashboard.</p>
+      <div class="checkbox-list">
+        {% set widgets = [
+          ('show_focus', 'Focus', 'Top priority tasks'),
+          ('show_today', 'Today', 'Tasks due today'),
+          ('show_next_event', 'Next Event', 'Upcoming event'),
+          ('show_reminders', 'Reminders', 'Due reminders'),
+          ('show_recent_notes', 'Recent Notes', 'Notes preview'),
+        ] %}
+        {% for name, label, description in widgets %}
+          <label class="checkbox-label checkbox-label-stacked">
+            <input
+              type="checkbox"
+              name="{{ name }}"
+              class="checkbox-input"
+              {% if not user_settings or getattr(user_settings, name, True) %}checked{% endif %}
+            >
+            <span class="checkbox-custom" aria-hidden="true"></span>
+            <span class="checkbox-content">
+              <span class="checkbox-label-text">{{ label }}</span>
+              <span class="checkbox-description">{{ description }}</span>
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Default Page -->
+  <section class="settings-section card" aria-labelledby="section-default-page">
+    <div class="card-header">
+      <h2 class="section-title" id="section-default-page">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M9 5v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Default Page
+      </h2>
+    </div>
+    <div class="card-body">
+      <p class="settings-description">Which page to show when you open HelmHub.</p>
+      <div class="radio-group radio-group-vertical">
+        {% set pages = [
+          ('/', 'Dashboard', 'Overview of everything'),
+          ('/tasks?view=today', 'Today\'s Tasks', 'Tasks due today'),
+          ('/tasks', 'All Tasks', 'Your full task list'),
+          ('/notes', 'Notes', 'Notes and scratchpad'),
+          ('/focus', 'Focus Mode', 'Distraction-free work'),
+        ] %}
+        {% for value, label, desc in pages %}
+          <label class="radio-option radio-option-block">
+            <input
+              type="radio"
+              name="default_page"
+              value="{{ value }}"
+              class="radio-input"
+              {% if user_settings and user_settings.default_page == value %}checked{% elif not user_settings and value == '/' %}checked{% endif %}
+            >
+            <span class="radio-custom" aria-hidden="true"></span>
+            <span class="radio-content">
+              <span class="radio-label-text">{{ label }}</span>
+              <span class="radio-description">{{ desc }}</span>
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- Save Button -->
+  <div class="settings-save-row">
+    <button type="submit" class="btn btn-primary btn-lg">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2 8l4.5 4.5L14 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Save Settings
+    </button>
+  </div>
+
+</form>
+
+<!-- Section 4: Two-Factor Authentication (separate form) -->
+<section class="settings-section card" aria-labelledby="section-totp">
+  <div class="card-header">
+    <h2 class="section-title" id="section-totp">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <rect x="3" y="7" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M6 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        <circle cx="9" cy="11.5" r="1.5" fill="currentColor"/>
+      </svg>
+      Two-Factor Authentication
+    </h2>
+    {% if current_user.totp_enabled %}
+      <span class="badge badge-success">Enabled</span>
+    {% else %}
+      <span class="badge badge-neutral">Disabled</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if current_user.totp_enabled %}
+      <p class="settings-description">Two-factor authentication is currently enabled. You'll need your authenticator app to sign in.</p>
+
+      <!-- Recovery Codes -->
+      {% if recovery_codes %}
+        <div class="recovery-codes-section">
+          <h3 class="subsection-title">Recovery Codes</h3>
+          <p class="settings-description">Save these codes somewhere safe. Each code can only be used once.</p>
+          <div class="recovery-codes-grid" aria-label="Recovery codes">
+            {% for code in recovery_codes %}
+              <code class="recovery-code {% if code.used %}recovery-code-used{% endif %}">
+                {{ code.code }}
+                {% if code.used %}<span class="sr-only">(used)</span>{% endif %}
+              </code>
+            {% endfor %}
+          </div>
+          <form method="post" action="/settings/totp/regenerate" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('This will invalidate your current recovery codes. Continue?')">
+              Regenerate Recovery Codes
+            </button>
+          </form>
+        </div>
+      {% endif %}
+
+      <!-- Disable TOTP -->
+      <div class="danger-zone">
+        <form method="post" action="/settings/totp/disable">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger" onclick="return confirm('Disable two-factor authentication? This will make your account less secure.')">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 1a5 5 0 015 5c0 2.5.75 3.5 1.5 4.5H1.5C2.25 9.5 3 8.5 3 6a5 5 0 015-5z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M6.5 14.5a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M3 3l10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            Disable Two-Factor Authentication
+          </button>
+        </form>
+      </div>
+
+    {% else %}
+      <p class="settings-description">Add an extra layer of security to your account by requiring a one-time code from your authenticator app when signing in.</p>
+
+      <form method="post" action="/settings/totp/enable">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="11" r="1.5" fill="currentColor"/>
+          </svg>
+          Enable Two-Factor Authentication
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function onSettingsSaved(event) {
+    var result = document.getElementById('settings-save-result');
+    if (!result) return;
+    if (event.detail && event.detail.successful) {
+      result.innerHTML = '<span class="save-success"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg> Saved</span>';
+
+      // Apply theme immediately
+      var themeRadio = document.querySelector('input[name="theme"]:checked');
+      if (themeRadio) {
+        document.body.className = document.body.className.replace(/theme-\S+/, 'theme-' + themeRadio.value);
+      }
+
+      setTimeout(function() { result.innerHTML = ''; }, 3000);
+    } else {
+      result.innerHTML = '<span class="save-error">Failed to save settings. Please try again.</span>';
+      setTimeout(function() { result.innerHTML = ''; }, 4000);
+    }
+  }
+</script>
+{% endblock %}

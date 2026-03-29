@@ -152,6 +152,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.routes.events import events_bp
     from app.routes.settings import settings_bp
     from app.routes.api import api_bp
+    from app.routes.bookmarks import bookmarks_bp
 
     app.register_blueprint(auth_bp,       url_prefix='/auth')
     app.register_blueprint(dashboard_bp,  url_prefix='/')
@@ -162,6 +163,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(settings_bp,   url_prefix='/settings')
     app.register_blueprint(focus_bp,      url_prefix='/focus')
     app.register_blueprint(api_bp,        url_prefix='/api')
+    app.register_blueprint(bookmarks_bp,  url_prefix='/bookmarks')
 
 
 def _configure_login_manager(app: Flask) -> None:  # noqa: ARG001

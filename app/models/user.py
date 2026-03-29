@@ -118,6 +118,14 @@ class User(UserMixin, db.Model):
         uselist=False,   # one-to-one
     )
 
+    bookmarks = relationship(
+        'Bookmark',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        lazy='dynamic',
+        order_by='Bookmark.created_at.desc()',
+    )
+
     # ------------------------------------------------------------------
     # Password helpers
     # ------------------------------------------------------------------

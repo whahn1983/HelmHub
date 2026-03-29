@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}New Bookmark — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/bookmarks" class="back-link" aria-label="Back to bookmarks">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Bookmarks
+  </a>
+  <h1 class="page-title">New Bookmark</h1>
+</div>
+
+{% if errors %}
+  <div class="alert alert-danger" role="alert">
+    <ul class="error-list">
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="card form-card">
+  <div class="card-body">
+    <form method="post" action="/bookmarks/new" class="bookmark-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label for="bookmark-url" class="form-label">
+          URL <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="url"
+          id="bookmark-url"
+          name="url"
+          class="form-input form-input-lg"
+          placeholder="https://example.com"
+          value="{{ form.get('url', '') if form is mapping else (form.url or '') }}"
+          autofocus
+          autocomplete="url"
+        >
+        <span class="form-hint">Paste any URL — the scheme (https://) will be added automatically if missing.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="bookmark-title" class="form-label">
+          Title <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="bookmark-title"
+          name="title"
+          class="form-input"
+          placeholder="Name this bookmark..."
+          value="{{ form.get('title', '') if form is mapping else (form.title or '') }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="bookmark-description" class="form-label">
+          Description <span class="form-label-hint">Optional</span>
+        </label>
+        <textarea
+          id="bookmark-description"
+          name="description"
+          class="form-textarea"
+          rows="3"
+          placeholder="Add a short note about this link..."
+        >{{ form.get('description', '') if form is mapping else (form.description or '') }}</textarea>
+      </div>
+
+      <div class="form-row form-row-align-end">
+        <div class="form-group">
+          <label for="bookmark-category" class="form-label">Category</label>
+          <input
+            type="text"
+            id="bookmark-category"
+            name="category"
+            class="form-input"
+            placeholder="e.g. tools, reading, work"
+            value="{{ form.get('category', '') if form is mapping else (form.category or '') }}"
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              name="pinned"
+              id="bookmark-pinned"
+              class="checkbox-input"
+              {% if (form.get('pinned') == 'on') if form is mapping else false %}checked{% endif %}
+            >
+            <span class="checkbox-custom" aria-hidden="true"></span>
+            <span class="checkbox-text">Pin to dashboard</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Bookmark</button>
+        <a href="/bookmarks" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}

@@ -9,7 +9,7 @@ Base prefix: /api  (registered by the app factory)
 
 from datetime import datetime, date, timedelta
 
-from flask import Blueprint, jsonify, request, abort, make_response
+from flask import Blueprint, jsonify, request, abort, make_response, redirect, url_for, flash
 from flask_login import login_required, current_user
 
 from app.extensions import db, csrf
@@ -221,6 +221,12 @@ def quick_capture():
         payload = request.form
 
     is_htmx = request.headers.get('HX-Request') == 'true'
+    is_browser_form = not request.is_json and not is_htmx
+    redirect_target = request.referrer or url_for('dashboard.index')
+
+    def _form_redirect(message, category='success'):
+        flash(message, category)
+        return redirect(redirect_target, code=303)
 
     def _ok_html(msg):
         resp = make_response(
@@ -257,6 +263,8 @@ def quick_capture():
         if not title:
             if is_htmx:
                 return _err_html('Task title is required.')
+            if is_browser_form:
+                return _form_redirect('Task title is required.', 'error')
             return jsonify({'error': 'title is required for tasks.'}), 422
 
         priority = payload.get('priority', 'medium').strip().lower()
@@ -282,6 +290,8 @@ def quick_capture():
 
         if is_htmx:
             return _ok_html(f'Task \u201c{title}\u201d added!')
+        if is_browser_form:
+            return _form_redirect(f'Task “{title}” added!')
         return jsonify({'status': 'created', 'type': 'task', 'item': _json_task(task)}), 201
 
     # ------------------------------------------------------------------
@@ -294,6 +304,8 @@ def quick_capture():
         if not title and not body:
             if is_htmx:
                 return _err_html('Note title or content is required.')
+            if is_browser_form:
+                return _form_redirect('Note title or content is required.', 'error')
             return jsonify({'error': 'title or body is required for notes.'}), 422
 
         if not title:
@@ -313,6 +325,8 @@ def quick_capture():
 
         if is_htmx:
             return _ok_html('Note saved!')
+        if is_browser_form:
+            return _form_redirect('Note saved!')
         return jsonify({'status': 'created', 'type': 'note', 'item': _json_note(note)}), 201
 
     # ------------------------------------------------------------------
@@ -323,6 +337,8 @@ def quick_capture():
         if not title:
             if is_htmx:
                 return _err_html('Reminder title is required.')
+            if is_browser_form:
+                return _form_redirect('Reminder title is required.', 'error')
             return jsonify({'error': 'title is required for reminders.'}), 422
 
         # Accept datetime-local (remind_at) or separate remind_date + remind_time
@@ -336,6 +352,8 @@ def quick_capture():
         if remind_at is None:
             if is_htmx:
                 return _err_html('Reminder date/time is required.')
+            if is_browser_form:
+                return _form_redirect('Reminder date/time is required.', 'error')
             return jsonify({'error': 'remind_at is required for reminders.'}), 422
 
         reminder = Reminder(
@@ -350,6 +368,8 @@ def quick_capture():
 
         if is_htmx:
             return _ok_html('Reminder set!')
+        if is_browser_form:
+            return _form_redirect('Reminder set!')
         return jsonify({'status': 'created', 'type': 'reminder', 'item': _json_reminder(reminder)}), 201
 
     # ------------------------------------------------------------------
@@ -360,6 +380,8 @@ def quick_capture():
         if not title:
             if is_htmx:
                 return _err_html('Event title is required.')
+            if is_browser_form:
+                return _form_redirect('Event title is required.', 'error')
             return jsonify({'error': 'title is required for events.'}), 422
 
         # Accept datetime-local (start_at) or separate start_date + start_time
@@ -373,6 +395,8 @@ def quick_capture():
         if start_at is None:
             if is_htmx:
                 return _err_html('Event start date/time is required.')
+            if is_browser_form:
+                return _form_redirect('Event start date/time is required.', 'error')
             return jsonify({'error': 'start_at is required for events.'}), 422
 
         end_at = _parse_dt_local(payload.get('end_at', ''))
@@ -395,6 +419,8 @@ def quick_capture():
 
         if is_htmx:
             return _ok_html(f'Event \u201c{title}\u201d added!')
+        if is_browser_form:
+            return _form_redirect(f'Event “{title}” added!')
         return jsonify({'status': 'created', 'type': 'event', 'item': _json_event(event)}), 201
 
     elif capture_type == 'bookmark':
@@ -404,10 +430,14 @@ def quick_capture():
         if not title:
             if is_htmx:
                 return _err_html('Bookmark title is required.')
+            if is_browser_form:
+                return _form_redirect('Bookmark title is required.', 'error')
             return jsonify({'error': 'title is required for bookmarks.'}), 422
         if not url:
             if is_htmx:
                 return _err_html('Bookmark URL is required.')
+            if is_browser_form:
+                return _form_redirect('Bookmark URL is required.', 'error')
             return jsonify({'error': 'url is required for bookmarks.'}), 422
 
         bookmark = Bookmark(
@@ -423,12 +453,16 @@ def quick_capture():
 
         if is_htmx:
             return _ok_html('Bookmark saved!')
+        if is_browser_form:
+            return _form_redirect('Bookmark saved!')
         return jsonify({'status': 'created', 'type': 'bookmark', 'item': _json_bookmark(bookmark)}), 201
 
     else:
         msg = f'Unknown type {capture_type!r}. Must be one of: task, note, reminder, event, bookmark.'
         if is_htmx:
             return _err_html(msg)
+        if is_browser_form:
+            return _form_redirect(msg, 'error')
         return jsonify({'error': msg}), 422
 
 

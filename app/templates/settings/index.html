@@ -137,6 +137,7 @@
           ('show_next_event', 'Next Event', 'Upcoming event'),
           ('show_reminders', 'Reminders', 'Due reminders'),
           ('show_recent_notes', 'Recent Notes', 'Notes preview'),
+          ('show_bookmarks', 'Bookmarks', 'Saved links preview'),
         ] %}
         {% for name, label, description in widgets %}
           <label class="checkbox-label checkbox-label-stacked">
@@ -144,7 +145,7 @@
               type="checkbox"
               name="{{ name }}"
               class="checkbox-input"
-              {% if not user_settings or getattr(user_settings, name, True) %}checked{% endif %}
+              {% if widget_visibility.get(name, True) %}checked{% endif %}
             >
             <span class="checkbox-content">
               <span class="checkbox-label-text">{{ label }}</span>

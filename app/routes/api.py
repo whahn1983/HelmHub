@@ -13,10 +13,10 @@ from flask import Blueprint, jsonify, request, abort, make_response
 from flask_login import login_required, current_user
 
 from app.extensions import db, csrf
-from app.models import Task, Note, Reminder, Event
+from app.models import Task, Note, Reminder, Event, Bookmark
 from app.services.auth_service import parse_datetime
 
-api_bp = Blueprint('api', __name__, url_prefix='/api')
+api_bp = Blueprint('api', __name__)
 
 # Exempt the entire API blueprint from CSRF because API consumers typically
 # send JSON without the WTF CSRF cookie.  Callers should authenticate via
@@ -83,6 +83,19 @@ def _json_event(event):
         'duration_minutes': event.duration_minutes,
         'created_at': event.created_at.isoformat(),
         'updated_at': event.updated_at.isoformat(),
+    }
+
+
+def _json_bookmark(bookmark):
+    return {
+        'id': bookmark.id,
+        'title': bookmark.title,
+        'url': bookmark.url,
+        'description': bookmark.description,
+        'category': bookmark.category,
+        'pinned': bookmark.pinned,
+        'created_at': bookmark.created_at.isoformat(),
+        'updated_at': bookmark.updated_at.isoformat(),
     }
 
 
@@ -190,7 +203,7 @@ def reminders_due():
 @login_required
 def quick_capture():
     """
-    Quick-capture endpoint: create a task, note, reminder, or event.
+    Quick-capture endpoint: create a task, note, reminder, event, or bookmark.
 
     Accepts JSON or form-encoded data (e.g. from HTMX forms).
     Returns JSON for JSON requests; HTML fragment for HTMX form requests.
@@ -200,6 +213,7 @@ def quick_capture():
     Reminder fields: type=reminder, title (required), remind_at (datetime-local)
     Event fields:  type=event, title (required), start_at (datetime-local),
                    end_at (datetime-local, optional), location
+    Bookmark fields: type=bookmark, title (required), url (required)
     """
     if request.is_json:
         payload = request.get_json(silent=True) or {}
@@ -383,8 +397,36 @@ def quick_capture():
             return _ok_html(f'Event \u201c{title}\u201d added!')
         return jsonify({'status': 'created', 'type': 'event', 'item': _json_event(event)}), 201
 
+    elif capture_type == 'bookmark':
+        title = payload.get('title', '').strip()
+        url = payload.get('url', '').strip()
+
+        if not title:
+            if is_htmx:
+                return _err_html('Bookmark title is required.')
+            return jsonify({'error': 'title is required for bookmarks.'}), 422
+        if not url:
+            if is_htmx:
+                return _err_html('Bookmark URL is required.')
+            return jsonify({'error': 'url is required for bookmarks.'}), 422
+
+        bookmark = Bookmark(
+            user_id=current_user.id,
+            title=title,
+            url=url,
+            description=payload.get('description', '').strip() or None,
+            category=payload.get('category', '').strip().lower() or None,
+            pinned=bool(payload.get('pinned', False)),
+        )
+        db.session.add(bookmark)
+        db.session.commit()
+
+        if is_htmx:
+            return _ok_html('Bookmark saved!')
+        return jsonify({'status': 'created', 'type': 'bookmark', 'item': _json_bookmark(bookmark)}), 201
+
     else:
-        msg = f'Unknown type {capture_type!r}. Must be one of: task, note, reminder, event.'
+        msg = f'Unknown type {capture_type!r}. Must be one of: task, note, reminder, event, bookmark.'
         if is_htmx:
             return _err_html(msg)
         return jsonify({'error': msg}), 422

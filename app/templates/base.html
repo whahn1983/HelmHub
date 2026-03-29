@@ -379,6 +379,24 @@
   </div><!-- /.modal-overlay -->
   {% endblock quick_capture_modal %}
 
+  <!-- Entity Form Modal -->
+  <div class="modal-overlay" id="entity-form-overlay" role="dialog" aria-modal="true" aria-labelledby="entity-form-title" hidden>
+    <div class="modal" id="entity-form-modal">
+      <div class="modal-header">
+        <h2 class="modal-title" id="entity-form-title">Add Item</h2>
+        <button class="modal-close btn-icon" type="button" onclick="closeEntityFormModal()" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <iframe id="entity-form-frame" title="Add form" style="width:100%; min-height:70vh; border:0; border-radius:8px; background:var(--bg-secondary);"></iframe>
+      </div>
+    </div>
+  </div>
+
+
   <!-- PWA Install Banner -->
   <div class="pwa-banner" id="pwa-banner" hidden role="banner" aria-label="Install app">
     <div class="pwa-banner-content">

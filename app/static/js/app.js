@@ -118,6 +118,67 @@
     el.textContent = replaced === current ? `${greeting}` : replaced;
   }
 
+
+
+  const EntityFormModal = {
+    overlay: null,
+    frame: null,
+    title: null,
+
+    init() {
+      this.overlay = $('#entity-form-overlay');
+      this.frame = $('#entity-form-frame');
+      this.title = $('#entity-form-title');
+      if (!this.overlay || !this.frame) return;
+
+      doc.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-modal-form]');
+        if (!trigger) return;
+        event.preventDefault();
+        const href = trigger.getAttribute('href');
+        const modalTitle = trigger.getAttribute('data-modal-title') || trigger.textContent.trim() || 'Add Item';
+        this.open(href, modalTitle);
+      });
+
+      this.overlay.addEventListener('click', (event) => {
+        if (event.target === this.overlay) this.close();
+      });
+
+      this.frame.addEventListener('load', () => {
+        try {
+          const framePath = this.frame.contentWindow?.location?.pathname || '';
+          if (!framePath.endsWith('/new') && !framePath.includes('/edit')) {
+            this.close(true);
+          }
+        } catch (err) {
+          // Ignore cross-origin/frame timing issues.
+        }
+      });
+
+      window.addEventListener('message', (event) => {
+        if (event.data === 'helmhub:close-entity-modal') {
+          this.close(true);
+        }
+      });
+    },
+
+    open(url, title) {
+      if (!url || !this.overlay || !this.frame) return;
+      if (this.title) this.title.textContent = title;
+      this.frame.src = url;
+      this.overlay.hidden = false;
+      body.classList.add('modal-open');
+    },
+
+    close(refresh = false) {
+      if (!this.overlay || !this.frame) return;
+      this.overlay.hidden = true;
+      this.frame.src = 'about:blank';
+      body.classList.remove('modal-open');
+      if (refresh) window.location.reload();
+    }
+  };
+
   const QuickCapture = {
     overlay: null,
 
@@ -296,6 +357,7 @@
   function wireGlobalFunctions() {
     window.openQuickCapture = (type) => QuickCapture.open(type || 'task');
     window.closeQuickCapture = () => QuickCapture.close();
+  window.closeEntityFormModal = () => EntityFormModal.close();
     window.switchTab = (type) => QuickCapture.switchTab(type || 'task');
     window.dismissPWABanner = () => {
       localStorage.setItem('pwa-dismissed', '1');
@@ -310,6 +372,7 @@
   function init() {
     ThemeManager.init();
     QuickCapture.init();
+    EntityFormModal.init();
     wireGlobalFunctions();
     initFlashMessages();
     initHTMXHandlers();

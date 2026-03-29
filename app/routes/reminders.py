@@ -55,9 +55,13 @@ def _parse_reminder_form(form):
 
     notes = form.get('notes', '').strip()
 
-    # remind_at is required: combine remind_date + remind_time
+    # remind_at is required: accept split fields or datetime-local value
+    remind_at_raw = form.get('remind_at', '').strip()
     remind_date_str = form.get('remind_date', '').strip()
     remind_time_str = form.get('remind_time', '').strip() or None
+    if remind_at_raw and not remind_date_str:
+        remind_date_str, _, remind_time_str = remind_at_raw.partition('T')
+        remind_time_str = remind_time_str or None
     remind_at = None
     if not remind_date_str:
         errors.append('Reminder date is required.')
@@ -137,7 +141,7 @@ def new():
                     errors=errors,
                     form=request.form,
                 ), 422
-            return render_template('reminders/new.html', errors=errors, form=request.form), 422
+            return render_template('reminders/edit.html', reminder=None, errors=errors, form=request.form), 422
 
         reminder = Reminder(
             user_id=current_user.id,
@@ -162,7 +166,7 @@ def new():
     if _is_htmx():
         return render_template('reminders/reminder_form.html', form={})
 
-    return render_template('reminders/new.html', form={})
+    return render_template('reminders/edit.html', reminder=None, form={})
 
 
 # ---------------------------------------------------------------------------

@@ -24,13 +24,13 @@ A self-hosted personal command center PWA for tasks, notes, reminders, events, b
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.12, Flask 3.0 |
+| Backend | Python 3.14, Flask 3.1 |
 | Database | PostgreSQL 16 (production), SQLite (development/testing) |
 | ORM | SQLAlchemy 2.0 + Alembic migrations |
 | Frontend | Jinja2 templates, HTMX 1.9, Vanilla JS |
 | Auth | Flask-Login, bcrypt (work factor 12), PyOTP (TOTP) |
 | Security | Flask-WTF (CSRF), Flask-Limiter (rate limiting) |
-| Server | Gunicorn 22 (2 workers) |
+| Server | Gunicorn 25 (2 workers) |
 | Deployment | Docker, Docker Compose |
 
 ---
@@ -68,7 +68,7 @@ Log in with the admin credentials you set in `.env`. On first run, the admin acc
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.14+
 - PostgreSQL (or use the default SQLite for development)
 
 ### Steps

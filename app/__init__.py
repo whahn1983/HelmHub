@@ -113,6 +113,8 @@ def _register_template_filters(app: Flask) -> None:
     """Register custom Jinja2 filters used across templates."""
     from datetime import datetime, date
 
+    app.jinja_env.globals['getattr'] = getattr
+
     def _fmt_time(value):
         """Return HH:MM AM/PM without a leading zero, cross-platform."""
         return value.strftime('%I:%M %p').lstrip('0')

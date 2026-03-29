@@ -249,7 +249,7 @@
 
         <!-- Task Tab -->
         <div class="tab-panel active" id="tab-task" role="tabpanel" aria-labelledby="tab-btn-task">
-          <form method="post" action="/api/quick-capture" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type" value="task">
             <div class="form-group">
@@ -279,7 +279,7 @@
 
         <!-- Note Tab -->
         <div class="tab-panel" id="tab-note" role="tabpanel" aria-labelledby="tab-btn-note" hidden>
-          <form method="post" action="/api/quick-capture" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type" value="note">
             <div class="form-group">
@@ -302,7 +302,7 @@
 
         <!-- Reminder Tab -->
         <div class="tab-panel" id="tab-reminder" role="tabpanel" aria-labelledby="tab-btn-reminder" hidden>
-          <form method="post" action="/api/quick-capture" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type" value="reminder">
             <div class="form-group">
@@ -321,7 +321,7 @@
 
         <!-- Event Tab -->
         <div class="tab-panel" id="tab-event" role="tabpanel" aria-labelledby="tab-btn-event" hidden>
-          <form method="post" action="/api/quick-capture" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type" value="event">
             <div class="form-group">
@@ -350,7 +350,7 @@
 
         <!-- Bookmark Tab -->
         <div class="tab-panel" id="tab-bookmark" role="tabpanel" aria-labelledby="tab-btn-bookmark" hidden>
-          <form method="post" action="/api/quick-capture" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="type" value="bookmark">
             <div class="form-group">

@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{% block title %}Error{% endblock %} — HelmHub</title>
+  <link rel="icon" href="/static/favicon.ico" sizes="any">
+  <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+  <script>
+    (() => {
+      const KEY = 'helmhub_theme';
+      const stored = localStorage.getItem(KEY) || 'system';
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const effective = stored === 'dark' || (stored === 'system' && prefersDark) ? 'dark' : 'light';
+      document.documentElement.style.backgroundColor = effective === 'dark' ? '#0f0f1a' : '#f8f9fa';
+    })();
+  </script>
   <link rel="stylesheet" href="/static/css/app.css">
   <style>
     .error-page {
@@ -43,7 +54,7 @@
     <a href="/" class="btn btn-primary">Go Home</a>
   </div>
   <script>
-    const theme = localStorage.getItem('theme') || 'system';
+    const theme = localStorage.getItem('helmhub_theme') || 'system';
     if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.body.className = 'theme-dark';
     } else {

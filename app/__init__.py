@@ -269,8 +269,11 @@ def _create_default_admin(app: Flask) -> None:
     from app.models.user import User
 
     try:
-        # Ensure tables exist (idempotent, handled by Alembic in production).
-        db.create_all()
+        # Tables may not exist yet if migrations haven't run; skip gracefully.
+        from sqlalchemy import inspect as sa_inspect
+        inspector = sa_inspect(db.engine)
+        if 'users' not in inspector.get_table_names():
+            return
 
         if db.session.query(User).count() > 0:
             return  # At least one user exists — skip first-run setup.

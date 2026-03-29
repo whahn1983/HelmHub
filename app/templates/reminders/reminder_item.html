@@ -1,0 +1,107 @@
+<li
+  class="reminder-item {% if reminder.is_due %}due{% endif %} {% if reminder.status == 'completed' or reminder.status == 'dismissed' %}done{% endif %}"
+  id="reminder-{{ reminder.id }}"
+>
+  <div class="reminder-main">
+    <div class="reminder-status-icon">
+      {% if reminder.status == 'completed' %}
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-label="Completed" title="Completed">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75" opacity="0.4"/>
+          <path d="M6.5 10l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+        </svg>
+      {% elif reminder.status == 'dismissed' %}
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-label="Dismissed" title="Dismissed">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75" opacity="0.4"/>
+          <path d="M7 13l6-6M7 7l6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+      {% elif reminder.is_due %}
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-label="Due now" title="Due now">
+          <path d="M10 2a7 7 0 017 7c0 3.5 1 5 2 6H1c1-1 2-2.5 2-6a7 7 0 017-7z" stroke="currentColor" stroke-width="1.75" class="reminder-bell-icon"/>
+          <path d="M8 18a2 2 0 004 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+      {% else %}
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-label="Upcoming" title="Upcoming">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M10 6v4.5l3 2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+      {% endif %}
+    </div>
+
+    <div class="reminder-content">
+      <span class="reminder-title {% if reminder.status in ('completed', 'dismissed') %}done-text{% endif %}">
+        {{ reminder.title }}
+      </span>
+      <div class="reminder-meta">
+        <span class="reminder-time {% if reminder.is_due %}overdue-text{% endif %}">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M6 3v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          {{ reminder.remind_at | format_datetime }}
+        </span>
+        {% if reminder.is_due and reminder.status == 'pending' %}
+          <span class="badge badge-warning badge-sm">Due now</span>
+        {% endif %}
+      </div>
+      {% if reminder.notes %}
+        <p class="reminder-notes-preview">{{ reminder.notes | truncate(100) }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if reminder.status == 'pending' %}
+    <div class="reminder-actions">
+      <div class="dropdown" id="snooze-dd-{{ reminder.id }}">
+        <button
+          class="btn btn-ghost btn-sm"
+          onclick="toggleDropdown('snooze-dd-{{ reminder.id }}')"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-label="Snooze options"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M7 4v3.5l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Snooze
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="dropdown-menu" role="menu" hidden>
+          <button class="dropdown-item" hx-post="/reminders/{{ reminder.id }}/snooze" hx-vals='{"minutes": 15}' hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" role="menuitem" onclick="document.getElementById('snooze-dd-{{ reminder.id }}').querySelector('.dropdown-menu').hidden=true">15 minutes</button>
+          <button class="dropdown-item" hx-post="/reminders/{{ reminder.id }}/snooze" hx-vals='{"minutes": 60}' hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" role="menuitem" onclick="document.getElementById('snooze-dd-{{ reminder.id }}').querySelector('.dropdown-menu').hidden=true">1 hour</button>
+          <button class="dropdown-item" hx-post="/reminders/{{ reminder.id }}/snooze" hx-vals='{"minutes": 480}' hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" role="menuitem" onclick="document.getElementById('snooze-dd-{{ reminder.id }}').querySelector('.dropdown-menu').hidden=true">8 hours</button>
+          <button class="dropdown-item" hx-post="/reminders/{{ reminder.id }}/snooze" hx-vals='{"minutes": 1440}' hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" role="menuitem" onclick="document.getElementById('snooze-dd-{{ reminder.id }}').querySelector('.dropdown-menu').hidden=true">Tomorrow</button>
+        </div>
+      </div>
+
+      <button hx-post="/reminders/{{ reminder.id }}/dismiss" hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" class="btn btn-ghost btn-sm" aria-label="Dismiss reminder">Dismiss</button>
+      <button hx-post="/reminders/{{ reminder.id }}/complete" hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-include="[name=csrf_token]" class="btn btn-primary btn-sm" aria-label="Mark as complete">Done</button>
+
+      <a href="/reminders/{{ reminder.id }}/edit" class="btn-icon" aria-label="Edit reminder" title="Edit">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <button hx-post="/reminders/{{ reminder.id }}/delete" hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-confirm="Delete this reminder?" hx-include="[name=csrf_token]" class="btn-icon btn-danger" aria-label="Delete reminder" title="Delete">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  {% else %}
+    <div class="reminder-actions">
+      <a href="/reminders/{{ reminder.id }}/edit" class="btn-icon" aria-label="Edit" title="Edit">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <button hx-post="/reminders/{{ reminder.id }}/delete" hx-target="#reminder-{{ reminder.id }}" hx-swap="outerHTML" hx-confirm="Delete this reminder?" hx-include="[name=csrf_token]" class="btn-icon btn-danger" aria-label="Delete" title="Delete">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  {% endif %}
+</li>

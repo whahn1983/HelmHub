@@ -105,7 +105,7 @@ def index():
 
     if _is_htmx():
         return render_template(
-            'partials/reminders_list.html',
+            'reminders/reminders_list.html',
             reminders=reminders,
             status_filter=status_filter,
         )
@@ -133,7 +133,7 @@ def new():
                 flash(msg, 'danger')
             if _is_htmx():
                 return render_template(
-                    'partials/reminder_form.html',
+                    'reminders/reminder_form.html',
                     errors=errors,
                     form=request.form,
                 ), 422
@@ -152,7 +152,7 @@ def new():
         flash('Reminder created.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/reminder_item.html', reminder=reminder))
+            response = make_response(render_template('reminders/reminder_item.html', reminder=reminder))
             response.headers['HX-Trigger'] = 'reminderCreated'
             return response
 
@@ -160,7 +160,7 @@ def new():
 
     # GET
     if _is_htmx():
-        return render_template('partials/reminder_form.html', form={})
+        return render_template('reminders/reminder_form.html', form={})
 
     return render_template('reminders/new.html', form={})
 
@@ -183,7 +183,7 @@ def edit(reminder_id):
                 flash(msg, 'danger')
             if _is_htmx():
                 return render_template(
-                    'partials/reminder_form.html',
+                    'reminders/reminder_form.html',
                     reminder=reminder,
                     errors=errors,
                     form=request.form,
@@ -206,7 +206,7 @@ def edit(reminder_id):
         flash('Reminder updated.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/reminder_item.html', reminder=reminder))
+            response = make_response(render_template('reminders/reminder_item.html', reminder=reminder))
             response.headers['HX-Trigger'] = 'reminderUpdated'
             return response
 
@@ -214,7 +214,7 @@ def edit(reminder_id):
 
     # GET
     if _is_htmx():
-        return render_template('partials/reminder_form.html', reminder=reminder, form=reminder)
+        return render_template('reminders/reminder_form.html', reminder=reminder, form=reminder)
 
     return render_template('reminders/edit.html', reminder=reminder, form=reminder)
 
@@ -234,7 +234,7 @@ def complete(reminder_id):
     flash('Reminder marked as complete.', 'success')
 
     if _is_htmx():
-        response = make_response(render_template('partials/reminder_item.html', reminder=reminder))
+        response = make_response(render_template('reminders/reminder_item.html', reminder=reminder))
         response.headers['HX-Trigger'] = 'reminderCompleted'
         return response
 
@@ -274,7 +274,7 @@ def snooze(reminder_id):
     reminder = _reminder_or_404(reminder_id)
 
     try:
-        minutes = int(request.form.get('snooze_minutes', DEFAULT_SNOOZE_MINUTES))
+        minutes = int(request.form.get('minutes', request.form.get('snooze_minutes', DEFAULT_SNOOZE_MINUTES)))
         if minutes < 1:
             minutes = DEFAULT_SNOOZE_MINUTES
     except (ValueError, TypeError):
@@ -287,7 +287,7 @@ def snooze(reminder_id):
     flash(f'Reminder snoozed for {minutes} minutes.', 'info')
 
     if _is_htmx():
-        response = make_response(render_template('partials/reminder_item.html', reminder=reminder))
+        response = make_response(render_template('reminders/reminder_item.html', reminder=reminder))
         response.headers['HX-Trigger'] = 'reminderSnoozed'
         return response
 

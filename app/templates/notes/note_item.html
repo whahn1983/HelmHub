@@ -1,0 +1,63 @@
+<article class="note-card {% if note.pinned %}note-pinned{% endif %}" id="note-{{ note.id }}" aria-labelledby="note-title-{{ note.id }}">
+  {% if note.pinned %}
+    <div class="note-pin-indicator" aria-label="Pinned" title="Pinned">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+        <path d="M10.5 1.5L9.5 5 11 6.5l-2.5 2.5L7 7.5l-3.5 3.5L3 11.5l-1-1 .5-.5L6 6.5 4.5 5l2.5-2 1.5 1L10.5 1.5z"/>
+      </svg>
+    </div>
+  {% endif %}
+
+  <div class="note-card-content">
+    {% if note.title %}
+      <h2 class="note-card-title" id="note-title-{{ note.id }}">{{ note.title }}</h2>
+    {% else %}
+      <span id="note-title-{{ note.id }}" class="sr-only">Untitled note</span>
+    {% endif %}
+
+    {% if note.body %}
+      <p class="note-card-body">{{ note.body | truncate(200) }}</p>
+    {% endif %}
+  </div>
+
+  <div class="note-card-footer">
+    {% if note.tag %}
+      <span class="tag-badge">{{ note.tag }}</span>
+    {% endif %}
+    <span class="note-date">{{ note.updated_at | format_date if note.updated_at else note.created_at | format_date }}</span>
+  </div>
+
+  <div class="note-card-actions">
+    <button
+      hx-post="/notes/{{ note.id }}/pin"
+      hx-target="#note-{{ note.id }}"
+      hx-swap="outerHTML"
+      hx-include="[name=csrf_token]"
+      class="btn-icon"
+      aria-label="{{ 'Unpin note' if note.pinned else 'Pin note' }}"
+      title="{{ 'Unpin' if note.pinned else 'Pin' }}"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="{{ 'currentColor' if note.pinned else 'none' }}" aria-hidden="true">
+        <path d="M12 2L10.5 6l2 2-3 3-2-2-4 4-.75.75-.75-.75.75-.75 4-4-2-2 3-3 2 2L12 2z" stroke="currentColor" stroke-width="1.25"/>
+      </svg>
+    </button>
+    <a href="/notes/{{ note.id }}/edit" class="btn-icon" aria-label="Edit note" title="Edit">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+    <button
+      hx-post="/notes/{{ note.id }}/delete"
+      hx-target="#note-{{ note.id }}"
+      hx-swap="outerHTML"
+      hx-confirm="Delete this note?"
+      hx-include="[name=csrf_token]"
+      class="btn-icon btn-danger"
+      aria-label="Delete note"
+      title="Delete"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M3.5 4.5h9M6 4.5V3h4v1.5M7 7v4M9 7v4M4.5 4.5l.5 8h6l.5-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+</article>

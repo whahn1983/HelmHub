@@ -454,6 +454,17 @@
       if (e.key === 'Escape') closeQuickCapture();
     });
 
+    // Auto-close quick-capture modal on successful save
+    document.addEventListener('quickCaptureSuccess', function() {
+      var forms = document.querySelectorAll('.quick-form');
+      forms.forEach(function(f) { f.reset(); });
+      setTimeout(function() {
+        closeQuickCapture();
+        var result = document.getElementById('quick-capture-result');
+        if (result) result.innerHTML = '';
+      }, 1200);
+    });
+
     // PWA install prompt
     var deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', function(e) {

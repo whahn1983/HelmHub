@@ -10,10 +10,10 @@
     </h1>
     <div class="date-time-block">
       <p class="current-date">
-        {{ now.strftime('%A, %B %-d, %Y') }}
+        {{ formatted_date }}
       </p>
       <p class="current-time" id="live-clock" aria-live="off" aria-atomic="true">
-        {{ now.strftime('%-I:%M %p') if (user_settings and user_settings.time_format == '12') else now.strftime('%H:%M') }}
+        {{ now.strftime('%I:%M %p').lstrip('0') if (user_settings and user_settings.time_format == '12') else now.strftime('%H:%M') }}
       </p>
     </div>
   </div>

@@ -142,6 +142,8 @@ def index():
     else:
         greeting = 'Good evening'
 
+    formatted_date = now.strftime('%A, %B ') + str(now.day) + now.strftime(', %Y')
+
     return render_template(
         'dashboard/index.html',
         top_tasks=priority_tasks,
@@ -153,5 +155,6 @@ def index():
         recent_notes=recent_notes,
         dashboard_bookmarks=dashboard_bookmarks,
         now=now,
+        formatted_date=formatted_date,
         greeting=greeting,
     )

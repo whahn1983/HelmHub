@@ -48,9 +48,13 @@ def _parse_event_form(form):
     if not title:
         errors.append('Title is required.')
 
-    # start_at is required
+    # start_at is required; accept either split fields or datetime-local value
+    start_at_raw = form.get('start_at', '').strip()
     start_date_str = form.get('start_date', '').strip()
     start_time_str = form.get('start_time', '').strip() or None
+    if start_at_raw and not start_date_str:
+        start_date_str, _, start_time_str = start_at_raw.partition('T')
+        start_time_str = start_time_str or None
     start_at = None
     if not start_date_str:
         errors.append('Start date is required.')
@@ -59,9 +63,13 @@ def _parse_event_form(form):
         if start_at is None:
             errors.append('Invalid date/time format for start date.')
 
-    # end_at is optional
+    # end_at is optional; accept either split fields or datetime-local value
+    end_at_raw = form.get('end_at', '').strip()
     end_date_str = form.get('end_date', '').strip()
     end_time_str = form.get('end_time', '').strip() or None
+    if end_at_raw and not end_date_str:
+        end_date_str, _, end_time_str = end_at_raw.partition('T')
+        end_time_str = end_time_str or None
     end_at = None
     if end_date_str:
         end_at = parse_datetime(end_date_str, end_time_str)
@@ -153,7 +161,7 @@ def new():
                     errors=errors,
                     form=request.form,
                 ), 422
-            return render_template('events/new.html', errors=errors, form=request.form), 422
+            return render_template('events/edit.html', errors=errors, form=request.form), 422
 
         event = Event(
             user_id=current_user.id,
@@ -179,7 +187,7 @@ def new():
     if _is_htmx():
         return render_template('partials/event_form.html', form={})
 
-    return render_template('events/new.html', form={})
+    return render_template('events/edit.html', event=None, form={})
 
 
 # ---------------------------------------------------------------------------

@@ -5,84 +5,12 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Tasks</h1>
-  <button
-    class="btn btn-primary"
-    onclick="toggleInlineForm()"
-    aria-expanded="false"
-    aria-controls="inline-task-form"
-    id="add-task-toggle"
-  >
+  <a href="/tasks/new" class="btn btn-primary" data-modal-form data-modal-title="Add Task">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
     Add Task
-  </button>
-</div>
-
-<!-- Inline Task Creation Form (collapsible) -->
-<div class="inline-form-container" id="inline-task-form" hidden>
-  <div class="card">
-    <div class="card-body">
-      <form
-        method="post"
-        action="/tasks/new"
-        hx-post="/tasks/new"
-        hx-target="#task-list"
-        hx-swap="afterbegin"
-        hx-on::after-request="clearInlineForm(event)"
-        class="task-create-form"
-        novalidate
-      >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="form-group">
-          <label for="new-task-title" class="form-label">Task title <span aria-hidden="true">*</span></label>
-          <input
-            type="text"
-            id="new-task-title"
-            name="title"
-            class="form-input"
-            placeholder="What needs to be done?"
-            required
-            autocomplete="off"
-          >
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="new-task-priority" class="form-label">Priority</label>
-            <select id="new-task-priority" name="priority" class="form-select">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="new-task-due-date" class="form-label">Due date</label>
-            <input type="date" id="new-task-due-date" name="due_date" class="form-input">
-          </div>
-          <div class="form-group">
-            <label for="new-task-due-time" class="form-label">Due time</label>
-            <input type="time" id="new-task-due-time" name="due_time" class="form-input">
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="new-task-notes" class="form-label">Notes (optional)</label>
-          <textarea id="new-task-notes" name="notes" class="form-textarea" rows="2" placeholder="Additional details..."></textarea>
-        </div>
-        <div class="form-group form-group-inline">
-          <label class="checkbox-label">
-            <input type="checkbox" name="pinned" id="new-task-pinned" class="checkbox-input">
-            <span class="checkbox-custom" aria-hidden="true"></span>
-            <span class="checkbox-text">Pin this task</span>
-          </label>
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Add Task</button>
-          <button type="button" class="btn btn-ghost" onclick="toggleInlineForm()">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  </a>
 </div>
 
 <!-- View Tabs -->
@@ -169,7 +97,7 @@
         {% if view == 'completed' %}Complete some tasks to see them here.{% elif view == 'overdue' %}All tasks are on track.{% else %}Add your first task to get started.{% endif %}
       </p>
       {% if view != 'completed' and view != 'overdue' %}
-        <button class="btn btn-primary" onclick="toggleInlineForm()">Add Task</button>
+        <a href="/tasks/new" class="btn btn-primary" data-modal-form data-modal-title="Add Task">Add Task</a>
       {% endif %}
     </div>
   {% endif %}
@@ -179,25 +107,4 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
 {% endblock %}
 
-{% block scripts %}
-<script>
-  function toggleInlineForm() {
-    var form = document.getElementById('inline-task-form');
-    var toggle = document.getElementById('add-task-toggle');
-    var isHidden = form.hidden;
-    form.hidden = !isHidden;
-    toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-    if (isHidden) {
-      var firstInput = form.querySelector('input:not([type=hidden])');
-      if (firstInput) firstInput.focus();
-    }
-  }
 
-  function clearInlineForm(event) {
-    if (event.detail && event.detail.successful) {
-      var form = document.querySelector('.task-create-form');
-      if (form) form.reset();
-    }
-  }
-</script>
-{% endblock %}

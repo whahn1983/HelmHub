@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
   <h1 class="page-title">Events</h1>
-  <a href="/events/new" class="btn btn-primary" aria-label="Add event">
+  <a href="/events/new" class="btn btn-primary" aria-label="Add event" data-modal-form data-modal-title="Add Event">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
@@ -170,7 +170,7 @@
         {% if view == 'today' %}Nothing scheduled today{% elif view == 'upcoming' %}No upcoming events{% else %}No events{% endif %}
       </p>
       <p class="empty-state-body">Schedule events to keep track of your commitments.</p>
-      <a href="/events/new" class="btn btn-primary">Add an Event</a>
+      <a href="/events/new" class="btn btn-primary" data-modal-form data-modal-title="Add Event">Add an Event</a>
     </div>
   {% endif %}
 </div>

@@ -13,7 +13,7 @@
       </svg>
       Scratchpad
     </a>
-    <a href="/notes/new" class="btn btn-primary" aria-label="New note">
+    <a href="/notes/new" class="btn btn-primary" aria-label="New note" data-modal-form data-modal-title="New Note">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
@@ -111,7 +111,7 @@
       </p>
       {% if not filter and not search_query %}
         <p class="empty-state-body">Capture your thoughts, ideas, and information.</p>
-        <a href="/notes/new" class="btn btn-primary">Write a note</a>
+        <a href="/notes/new" class="btn btn-primary" data-modal-form data-modal-title="New Note">Write a note</a>
       {% endif %}
     </div>
   {% endif %}

@@ -653,6 +653,7 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
 }
 
 .modal-tab.active { color: var(--accent-blue); border-color: var(--accent-blue); }
+.modal-overlay[hidden] { display: none !important; }
 .tab-panel[hidden] { display: none !important; }
 .quick-capture-result { min-height: 1.4rem; font-size: .82rem; color: var(--text-secondary); }
 

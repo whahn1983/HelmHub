@@ -184,6 +184,10 @@
       const status = xhr?.status || 0;
 
       if (status >= 200 && status < 300) {
+        if (target && target.id === 'quick-capture-result') {
+          window.setTimeout(() => QuickCapture.close(), 600);
+        }
+
         const existing = $('#save-result-indicator');
         const indicator = existing || doc.createElement('span');
         indicator.id = 'save-result-indicator';

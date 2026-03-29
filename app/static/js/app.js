@@ -240,6 +240,20 @@
   }
 
   function initHTMXHandlers() {
+    doc.addEventListener('htmx:configRequest', (event) => {
+      const tokenInput = $('#csrf-global, input[name="csrf_token"]');
+      const csrfToken = tokenInput?.value;
+      if (!csrfToken) return;
+
+      const { detail } = event;
+      if (!detail.parameters?.csrf_token) {
+        detail.parameters = detail.parameters || {};
+        detail.parameters.csrf_token = csrfToken;
+      }
+      detail.headers = detail.headers || {};
+      detail.headers['X-CSRFToken'] = csrfToken;
+    });
+
     doc.addEventListener('htmx:afterRequest', (event) => {
       const { xhr, target } = event.detail || {};
       const status = xhr?.status || 0;

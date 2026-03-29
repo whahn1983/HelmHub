@@ -4,6 +4,14 @@
 
 {% block content %}
 <div class="page-header dashboard-header">
+  <div class="quick-actions" aria-label="Quick actions">
+    <button class="btn btn-primary btn-sm" onclick="openQuickCapture('task')" aria-label="Add item">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Add
+    </button>
+  </div>
   <div class="greeting-block">
     <h1 class="greeting" id="greeting-text">
       {{ greeting }}, {{ current_user.username }}
@@ -12,37 +20,10 @@
       <p class="current-date">
         {{ formatted_date }}
       </p>
-      <p class="current-time" id="live-clock" aria-live="off" aria-atomic="true">
+      <p class="current-time" id="live-clock" data-format="{{ user_settings.time_format }}" aria-live="off" aria-atomic="true">
         {{ now.strftime('%I:%M %p').lstrip('0') if (user_settings and user_settings.time_format == '12') else now.strftime('%H:%M') }}
       </p>
     </div>
-  </div>
-  <!-- Quick action buttons -->
-  <div class="quick-actions" aria-label="Quick actions">
-    <button class="btn btn-primary btn-sm" onclick="openQuickCapture('task')" aria-label="Add task">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      Task
-    </button>
-    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('note')" aria-label="Add note">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      Note
-    </button>
-    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('reminder')" aria-label="Add reminder">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      Reminder
-    </button>
-    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('event')" aria-label="Add event">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      Event
-    </button>
   </div>
 </div>
 
@@ -70,6 +51,7 @@
 <div class="dashboard-grid">
 
   <!-- Focus Card: Top Priority Tasks -->
+  {% if widget_visibility.tasks %}
   <section class="card dashboard-card card-focus" aria-labelledby="focus-card-title">
     <div class="card-header">
       <h2 class="card-title" id="focus-card-title">
@@ -128,8 +110,10 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Today's Tasks Card -->
+  {% if widget_visibility.today %}
   <section class="card dashboard-card card-today" aria-labelledby="today-card-title">
     <div class="card-header">
       <h2 class="card-title" id="today-card-title">
@@ -178,8 +162,10 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Next Event Card -->
+  {% if widget_visibility.events %}
   <section class="card dashboard-card card-event" aria-labelledby="event-card-title">
     <div class="card-header">
       <h2 class="card-title" id="event-card-title">
@@ -251,8 +237,10 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Reminders Card -->
+  {% if widget_visibility.reminders %}
   <section class="card dashboard-card card-reminders" aria-labelledby="reminders-card-title">
     <div class="card-header">
       <h2 class="card-title" id="reminders-card-title">
@@ -346,8 +334,10 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Recent Notes Card -->
+  {% if widget_visibility.notes %}
   <section class="card dashboard-card card-notes" aria-labelledby="notes-card-title">
     <div class="card-header">
       <h2 class="card-title" id="notes-card-title">
@@ -384,8 +374,10 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
   <!-- Bookmarks Card -->
+  {% if widget_visibility.bookmarks %}
   <section class="card dashboard-card card-bookmarks" aria-labelledby="bookmarks-card-title">
     <div class="card-header">
       <h2 class="card-title" id="bookmarks-card-title">
@@ -433,6 +425,7 @@
       {% endif %}
     </div>
   </section>
+  {% endif %}
 
 </div><!-- /.dashboard-grid -->
 

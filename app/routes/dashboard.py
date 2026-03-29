@@ -8,7 +8,7 @@ from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
 
 from app.extensions import db
-from app.models import Task, Note, Reminder, Event, Bookmark
+from app.models import Task, Note, Reminder, Event, Bookmark, Setting
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/')
 
@@ -31,6 +31,19 @@ def index():
     now = datetime.utcnow()
     today_start = datetime.combine(date.today(), datetime.min.time())
     today_end = today_start + timedelta(days=1)
+    user_settings = Setting.get_or_create(current_user.id)
+    widget_visibility = {
+        'tasks': True,
+        'today': True,
+        'events': True,
+        'reminders': True,
+        'notes': True,
+        'bookmarks': True,
+    }
+    for widget in (user_settings.get_dashboard_config().get('widgets') or []):
+        widget_id = widget.get('id')
+        if widget_id in widget_visibility:
+            widget_visibility[widget_id] = bool(widget.get('visible', True))
 
     # --- Tasks ---
 
@@ -154,6 +167,8 @@ def index():
         next_event=next_event,
         recent_notes=recent_notes,
         dashboard_bookmarks=dashboard_bookmarks,
+        user_settings=user_settings,
+        widget_visibility=widget_visibility,
         now=now,
         formatted_date=formatted_date,
         greeting=greeting,

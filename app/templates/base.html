@@ -242,6 +242,7 @@
         <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-note" id="tab-btn-note" onclick="switchTab('note')">Note</button>
         <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-reminder" id="tab-btn-reminder" onclick="switchTab('reminder')">Reminder</button>
         <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-event" id="tab-btn-event" onclick="switchTab('event')">Event</button>
+        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-bookmark" id="tab-btn-bookmark" onclick="switchTab('bookmark')">Bookmark</button>
       </div>
 
       <div class="modal-body">
@@ -343,6 +344,29 @@
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add Event</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Bookmark Tab -->
+        <div class="tab-panel" id="tab-bookmark" role="tabpanel" aria-labelledby="tab-btn-bookmark" hidden>
+          <form hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type" value="bookmark">
+            <div class="form-group">
+              <label for="qc-bookmark-title" class="form-label">Title</label>
+              <input type="text" id="qc-bookmark-title" name="title" class="form-input" placeholder="Bookmark title..." required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="qc-bookmark-url" class="form-label">URL</label>
+              <input type="url" id="qc-bookmark-url" name="url" class="form-input" placeholder="https://example.com" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="qc-bookmark-category" class="form-label">Category (optional)</label>
+              <input type="text" id="qc-bookmark-category" name="category" class="form-input" placeholder="e.g. docs, tools..." autocomplete="off">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save Bookmark</button>
             </div>
           </form>
         </div>

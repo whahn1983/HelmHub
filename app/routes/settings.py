@@ -30,6 +30,14 @@ settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 # Valid choices (mirrors Setting model constants).
 VALID_THEMES = ('light', 'dark', 'system')
 VALID_TIME_FORMATS = ('12', '24')
+WIDGET_FIELD_MAP = {
+    'show_focus': 'tasks',
+    'show_today': 'today',
+    'show_next_event': 'events',
+    'show_reminders': 'reminders',
+    'show_recent_notes': 'notes',
+    'show_bookmarks': 'bookmarks',
+}
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +54,21 @@ def _get_or_create_settings():
     return setting
 
 
+def _widget_visibility_map(setting):
+    """Return a dict mapping settings form widget fields to bool visibility."""
+    visibility_by_widget = {
+        widget_id: True for widget_id in WIDGET_FIELD_MAP.values()
+    }
+    for widget in (setting.get_dashboard_config().get('widgets') or []):
+        widget_id = widget.get('id')
+        if widget_id in visibility_by_widget:
+            visibility_by_widget[widget_id] = bool(widget.get('visible', True))
+    return {
+        field_name: visibility_by_widget.get(widget_id, True)
+        for field_name, widget_id in WIDGET_FIELD_MAP.items()
+    }
+
+
 # ---------------------------------------------------------------------------
 # General settings
 # ---------------------------------------------------------------------------
@@ -59,8 +82,13 @@ def index():
     if request.method == 'POST':
         theme = request.form.get('theme', 'system').strip().lower()
         time_format = request.form.get('time_format', '12').strip()
-        default_page = request.form.get('default_page', 'dashboard').strip()
+        default_page = request.form.get('default_page', '/').strip()
         show_weather = request.form.get('show_weather') == 'on'
+        visible_widget_ids = {
+            widget_id
+            for field_name, widget_id in WIDGET_FIELD_MAP.items()
+            if request.form.get(field_name) == 'on'
+        }
 
         errors = []
         if theme not in VALID_THEMES:
@@ -71,12 +99,25 @@ def index():
         if errors:
             for msg in errors:
                 flash(msg, 'danger')
-            return render_template('settings/index.html', setting=setting, errors=errors), 422
+            return render_template(
+                'settings/index.html',
+                setting=setting,
+                widget_visibility=_widget_visibility_map(setting),
+                errors=errors,
+            ), 422
 
         setting.theme = theme
         setting.time_format = time_format
         setting.default_page = default_page
         setting.show_weather = show_weather
+        setting.set_dashboard_config(
+            {
+                'widgets': [
+                    {'id': widget_id, 'visible': widget_id in visible_widget_ids}
+                    for widget_id in WIDGET_FIELD_MAP.values()
+                ],
+            }
+        )
         db.session.commit()
 
         flash('Settings saved.', 'success')
@@ -88,7 +129,11 @@ def index():
 
         return redirect(url_for('settings.index'))
 
-    return render_template('settings/index.html', setting=setting)
+    return render_template(
+        'settings/index.html',
+        setting=setting,
+        widget_visibility=_widget_visibility_map(setting),
+    )
 
 
 # ---------------------------------------------------------------------------

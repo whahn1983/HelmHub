@@ -73,7 +73,7 @@ class Setting(db.Model):
 
     theme       = db.Column(db.String(16), nullable=False, default=THEME_SYSTEM)
     time_format = db.Column(db.String(4),  nullable=False, default=TIME_FORMAT_12)
-    default_page = db.Column(db.String(64), nullable=False, default='dashboard')
+    default_page = db.Column(db.String(64), nullable=False, default='/')
     show_weather = db.Column(db.Boolean,   nullable=False, default=True)
 
     # JSON blob — flexible widget configuration for the dashboard

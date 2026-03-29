@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Bookmarks — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Bookmarks</h1>
+  <div class="page-header-actions">
+    <a href="/bookmarks/new" class="btn btn-primary" aria-label="New bookmark">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      New Bookmark
+    </a>
+  </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="view-tabs" role="tablist" aria-label="Bookmark filters">
+  <a
+    href="/bookmarks"
+    class="view-tab {% if not pinned_only %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if not pinned_only else 'false' }}"
+  >All</a>
+  <a
+    href="/bookmarks?pinned=true"
+    class="view-tab {% if pinned_only %}active{% endif %}"
+    role="tab"
+    aria-selected="{{ 'true' if pinned_only else 'false' }}"
+  >
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true" style="vertical-align: middle; margin-right: 4px;">
+      <path d="M10.5 1.5L9.5 5 11 6.5l-2.5 2.5L7 7.5l-3.5 3.5L3 11.5l-1-1 .5-.5L6 6.5 4.5 5l2.5-2 1.5 1L10.5 1.5z"/>
+    </svg>
+    Pinned
+  </a>
+</div>
+
+<!-- Search and Category Filter Row -->
+<div class="filters-row">
+  <div class="search-input-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M10.5 10.5l3.5 3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+    <input
+      type="search"
+      name="search"
+      id="bookmarks-search"
+      class="form-input search-input"
+      placeholder="Search bookmarks..."
+      value="{{ search or '' }}"
+      autocomplete="off"
+      aria-label="Search bookmarks"
+    >
+  </div>
+
+  {% if all_categories %}
+    <div class="tag-filter">
+      <label for="category-filter-select" class="sr-only">Filter by category</label>
+      <select
+        id="category-filter-select"
+        name="category"
+        class="form-select form-select-sm"
+        onchange="window.location='/bookmarks?category=' + encodeURIComponent(this.value)"
+        aria-label="Filter by category"
+      >
+        <option value="">All categories</option>
+        {% for cat in all_categories %}
+          <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Bookmarks Grid -->
+<div id="bookmarks-grid" class="bookmarks-grid" aria-live="polite" aria-label="Bookmarks">
+  {% if bookmarks %}
+    {% for bookmark in bookmarks %}
+      {% include 'bookmarks/bookmark_item.html' %}
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+        <path d="M24 6C18 10 14 17 14 24s4 14 10 18M24 6c6 4 10 11 10 18s-4 14-10 18M6 24h36" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+      </svg>
+      <p class="empty-state-title">
+        {% if pinned_only %}No pinned bookmarks
+        {% elif search %}No bookmarks match your search
+        {% elif category %}No bookmarks in this category
+        {% else %}No bookmarks yet{% endif %}
+      </p>
+      {% if not pinned_only and not search and not category %}
+        <p class="empty-state-body">Save links to your favourite sites, tools, and resources.</p>
+        <a href="/bookmarks/new" class="btn btn-primary">Add a bookmark</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Live search
+  var searchInput = document.getElementById('bookmarks-search');
+  if (searchInput) {
+    var searchTimer;
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function() {
+        var params = new URLSearchParams(window.location.search);
+        if (searchInput.value) {
+          params.set('search', searchInput.value);
+        } else {
+          params.delete('search');
+        }
+        window.location.search = params.toString();
+      }, 400);
+    });
+  }
+</script>
+{% endblock %}

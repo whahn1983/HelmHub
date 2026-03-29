@@ -8,7 +8,7 @@ from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
 
 from app.extensions import db
-from app.models import Task, Note, Reminder, Event
+from app.models import Task, Note, Reminder, Event, Bookmark
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/')
 
@@ -116,6 +116,24 @@ def index():
         .all()
     )
 
+    # --- Bookmarks ---
+
+    # Show pinned bookmarks first, then most-recently added, up to 6 on dash.
+    pinned_bookmarks = (
+        Bookmark.query
+        .filter_by(user_id=current_user.id, pinned=True)
+        .order_by(Bookmark.created_at.desc())
+        .all()
+    )
+    recent_bookmarks = (
+        Bookmark.query
+        .filter_by(user_id=current_user.id, pinned=False)
+        .order_by(Bookmark.created_at.desc())
+        .limit(max(0, 6 - len(pinned_bookmarks)))
+        .all()
+    )
+    dashboard_bookmarks = pinned_bookmarks + recent_bookmarks
+
     hour = now.hour
     if hour < 12:
         greeting = 'Good morning'
@@ -133,6 +151,7 @@ def index():
         today_events=today_events,
         next_event=next_event,
         recent_notes=recent_notes,
+        dashboard_bookmarks=dashboard_bookmarks,
         now=now,
         greeting=greeting,
     )

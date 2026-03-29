@@ -93,6 +93,15 @@
           </a>
         </li>
         <li>
+          <a href="/bookmarks" class="nav-link {% if request.path.startswith('/bookmarks') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M10 2C7.5 4.5 6 7 6 10s1.5 5.5 4 8M10 2c2.5 2.5 4 5 4 8s-1.5 5.5-4 8M2 10h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Bookmarks</span>
+          </a>
+        </li>
+        <li>
           <a href="/reminders" class="nav-link {% if request.path.startswith('/reminders') %}active{% endif %}">
             <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M10 2a6 6 0 016 6c0 3 1 4 2 5H2c1-1 2-2 2-5a6 6 0 016-6z" stroke="currentColor" stroke-width="1.75"/>
@@ -187,6 +196,13 @@
         <path d="M13 2v4h4M6 9h8M6 12h8M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       <span>Notes</span>
+    </a>
+    <a href="/bookmarks" class="bottom-nav-item {% if request.path.startswith('/bookmarks') %}active{% endif %}" aria-label="Bookmarks">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M10 2C7.5 4.5 6 7 6 10s1.5 5.5 4 8M10 2c2.5 2.5 4 5 4 8s-1.5 5.5-4 8M2 10h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>Bookmarks</span>
     </a>
     <a href="/settings" class="bottom-nav-item {% if request.path.startswith('/settings') %}active{% endif %}" aria-label="Settings">
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">

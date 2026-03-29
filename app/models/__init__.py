@@ -16,6 +16,7 @@ from app.models.note import Note
 from app.models.reminder import Reminder
 from app.models.event import Event
 from app.models.setting import Setting
+from app.models.bookmark import Bookmark
 
 __all__ = [
     'User',
@@ -24,4 +25,5 @@ __all__ = [
     'Reminder',
     'Event',
     'Setting',
+    'Bookmark',
 ]

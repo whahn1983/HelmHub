@@ -14,7 +14,7 @@ import logging
 import os
 from datetime import datetime
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, send_from_directory
 from flask_login import current_user
 
 from app.config import config
@@ -67,6 +67,16 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_blueprints(app)
 
     # ------------------------------------------------------------------
+    # 3b. Service-worker served from root so its scope covers the whole app
+    # ------------------------------------------------------------------
+    @app.route('/sw.js')
+    def service_worker():  # noqa: WPS430
+        response = send_from_directory(app.static_folder, 'sw.js')
+        response.headers['Service-Worker-Allowed'] = '/'
+        response.headers['Content-Type'] = 'application/javascript'
+        return response
+
+    # ------------------------------------------------------------------
     # 4. Login-manager user loader
     # ------------------------------------------------------------------
     _configure_login_manager(app)
@@ -103,6 +113,10 @@ def _register_template_filters(app: Flask) -> None:
     """Register custom Jinja2 filters used across templates."""
     from datetime import datetime, date
 
+    def _fmt_time(value):
+        """Return HH:MM AM/PM without a leading zero, cross-platform."""
+        return value.strftime('%I:%M %p').lstrip('0')
+
     @app.template_filter('format_datetime')
     def format_datetime_filter(value, fmt=None):  # noqa: WPS430
         if value is None:
@@ -110,8 +124,8 @@ def _register_template_filters(app: Flask) -> None:
         if isinstance(value, datetime):
             today = date.today()
             if value.date() == today:
-                return value.strftime('%-I:%M %p')
-            return value.strftime('%b %-d, %-I:%M %p')
+                return _fmt_time(value)
+            return value.strftime('%b ') + str(value.day) + ', ' + _fmt_time(value)
         return str(value)
 
     @app.template_filter('format_time')
@@ -119,7 +133,7 @@ def _register_template_filters(app: Flask) -> None:
         if value is None:
             return ''
         if isinstance(value, datetime):
-            return value.strftime('%-I:%M %p')
+            return _fmt_time(value)
         return str(value)
 
     @app.template_filter('format_date')
@@ -127,7 +141,7 @@ def _register_template_filters(app: Flask) -> None:
         if value is None:
             return ''
         if hasattr(value, 'strftime'):
-            return value.strftime('%b %-d, %Y')
+            return value.strftime('%b ') + str(value.day) + value.strftime(', %Y')
         return str(value)
 
 

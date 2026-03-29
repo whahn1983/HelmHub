@@ -94,7 +94,7 @@
               name="pinned"
               id="bookmark-pinned"
               class="checkbox-input"
-              {% if (form.get('pinned') == 'on') if form is mapping else false %}checked{% endif %}
+              {% if form is mapping and form.get('pinned') == 'on' %}checked{% endif %}
             >
             <span class="checkbox-custom" aria-hidden="true"></span>
             <span class="checkbox-text">Pin to dashboard</span>

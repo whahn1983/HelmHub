@@ -11,7 +11,7 @@ A self-hosted personal command center PWA for tasks, notes, reminders, events, b
 - **Notes** — write and organize notes with tags and pinning; includes quick scratchpad
 - **Reminders** — time-based alerts with snooze support
 - **Events** — calendar events with start/end times and location
-- **Bookmarks** — save and categorize URLs with descriptions
+- **Bookmarks** — save, categorize, and pin URLs with optional descriptions; search across title, URL, and description; filter by category
 - **Focus Mode** — distraction-free view for deep work
 - **TOTP 2FA** — optional two-factor authentication with recovery codes
 - **PWA** — installable as a standalone app with offline support via service worker
@@ -226,10 +226,21 @@ pytest tests/
 pytest tests/ -v
 
 # Run a specific test file
+pytest tests/test_bookmarks.py
 pytest tests/test_tasks.py
 ```
 
 Tests use an in-memory SQLite database with CSRF and rate limiting disabled. No external services are required.
+
+### Test coverage
+
+| Module | Test file | Areas covered |
+|---|---|---|
+| Auth | `tests/test_auth.py` | Login, logout, TOTP 2FA, recovery codes |
+| Dashboard | `tests/test_dashboard.py` | Page render, widget data, API endpoint |
+| Tasks | `tests/test_tasks.py` | CRUD, completion toggle, pin, filtering |
+| Notes | `tests/test_notes.py` | CRUD, pin, search, scratchpad |
+| Bookmarks | `tests/test_bookmarks.py` | Model properties, CRUD, pin toggle, search/filter, HTMX responses |
 
 ---
 

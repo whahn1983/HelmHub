@@ -24,6 +24,8 @@
   <div class="card">
     <div class="card-body">
       <form
+        method="post"
+        action="/tasks/new"
         hx-post="/tasks/new"
         hx-target="#task-list"
         hx-swap="afterbegin"

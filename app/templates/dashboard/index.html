@@ -223,10 +223,26 @@
             </svg>
           </a>
         </div>
-
-        {% if today_events | length > 1 %}
-          <p class="card-footer-note">+{{ today_events | length - 1 }} more today</p>
+        {% set other_today = today_events | selectattr('id', '!=', next_event.id) | list %}
+        {% if other_today %}
+          <ul class="events-today-list">
+            {% for event in other_today %}
+              <li class="event-item">
+                <span class="event-time-start">{{ event.start_at | format_time }}</span>
+                <span class="event-title">{{ event.title }}</span>
+              </li>
+            {% endfor %}
+          </ul>
         {% endif %}
+      {% elif today_events %}
+        <ul class="events-today-list">
+          {% for event in today_events %}
+            <li class="event-item">
+              <span class="event-time-start">{{ event.start_at | format_time }}</span>
+              <span class="event-title">{{ event.title }}</span>
+            </li>
+          {% endfor %}
+        </ul>
       {% else %}
         <div class="empty-state empty-state-sm">
           <p>No upcoming events.</p>

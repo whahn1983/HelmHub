@@ -1,0 +1,29 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Flask instance folder (local DB, config overrides)
+instance/
+
+# Environment variables
+.env
+.env.*
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# pytest cache
+.pytest_cache/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo

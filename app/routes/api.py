@@ -326,6 +326,7 @@ def quick_capture():
 # ---------------------------------------------------------------------------
 
 @api_bp.route('/dashboard-data')
+@api_bp.route('/v1/dashboard-data')
 @login_required
 def dashboard_data():
     """
@@ -425,13 +426,22 @@ def dashboard_data():
         .all()
     )
 
+    tasks_json = [_json_task(t) for t in today_tasks]
+    reminders_json = [_json_reminder(r) for r in due_reminders]
+    events_json = [_json_event(e) for e in today_events]
+    notes_json = [_json_note(n) for n in recent_notes]
+
     return jsonify({
         'priority_tasks': [_json_task(t) for t in priority_tasks],
-        'today_tasks': [_json_task(t) for t in today_tasks],
+        'today_tasks': tasks_json,
+        'tasks': tasks_json,
         'overdue_count': overdue_count,
-        'due_reminders': [_json_reminder(r) for r in due_reminders],
-        'today_events': [_json_event(e) for e in today_events],
+        'due_reminders': reminders_json,
+        'reminders': reminders_json,
+        'today_events': events_json,
+        'events': events_json,
         'next_event': _json_event(next_event) if next_event else None,
-        'recent_notes': [_json_note(n) for n in recent_notes],
+        'recent_notes': notes_json,
+        'notes': notes_json,
         'generated_at': now.isoformat(),
     })

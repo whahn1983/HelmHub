@@ -100,8 +100,8 @@ def new():
     """Render the create-note form (GET) or process a submission (POST)."""
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
-        body = request.form.get('body', '').strip()
-        tag = request.form.get('tag', '').strip().lower()
+        body = (request.form.get('content', '') or request.form.get('body', '')).strip()
+        tag = (request.form.get('tags', '') or request.form.get('tag', '')).strip().lower()
         pinned = request.form.get('pinned') == 'on'
 
         errors = []
@@ -295,7 +295,7 @@ def save_scratchpad():
         )
         db.session.add(note)
 
-    note.body = request.form.get('body', '')
+    note.body = request.form.get('content', '') or request.form.get('body', '')
     db.session.commit()
 
     if _is_htmx():

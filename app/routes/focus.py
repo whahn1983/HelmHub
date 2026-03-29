@@ -69,10 +69,22 @@ def index():
         .first()
     )
 
+    # Pre-format date/time strings to avoid platform-specific strftime directives
+    # (%-d and %-I are Linux-only; %#d and %#I are Windows-only)
+    now_date_str = now.strftime('%A, %B ') + str(now.day)
+    now_hour_12 = str(now.hour % 12 or 12)
+    now_time_12 = now_hour_12 + now.strftime(':%M')
+    now_time_24 = now.strftime('%H:%M')
+    now_ampm = now.strftime('%p')
+
     return render_template(
         'focus/index.html',
         focus_task=focus_task,
         top_tasks=top_tasks,
         next_event=next_event,
         now=now,
+        now_date_str=now_date_str,
+        now_time_12=now_time_12,
+        now_time_24=now_time_24,
+        now_ampm=now_ampm,
     )

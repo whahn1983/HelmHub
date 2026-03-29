@@ -36,14 +36,14 @@
     <!-- Live Clock -->
     <div class="focus-clock-block" aria-label="Current time">
       <div class="focus-clock" id="focus-clock" aria-live="off" aria-atomic="true">
-        {{ now.strftime('%-I:%M') if user_settings and user_settings.time_format == '12' else now.strftime('%H:%M') }}
+        {{ now_time_12 if user_settings and user_settings.time_format == '12' else now_time_24 }}
       </div>
       <div class="focus-clock-detail">
         <span class="focus-ampm" id="focus-ampm">
-          {{ now.strftime('%p') if user_settings and user_settings.time_format == '12' else '' }}
+          {{ now_ampm if user_settings and user_settings.time_format == '12' else '' }}
         </span>
         <span class="focus-date" id="focus-date">
-          {{ now.strftime('%A, %B %-d') }}
+          {{ now_date_str }}
         </span>
       </div>
     </div>

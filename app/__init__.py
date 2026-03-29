@@ -241,7 +241,7 @@ def _register_context_processors(app: Flask) -> None:
         return {
             'current_user': current_user,
             'now': datetime.utcnow(),
-            'settings': user_settings,
+            'user_settings': user_settings,
         }
 
 

@@ -289,4 +289,4 @@ Default settings (`gunicorn.conf.py`):
 
 ## License
 
-[Apache 2.0](LICENSE)
+[GPLv3](LICENSE)

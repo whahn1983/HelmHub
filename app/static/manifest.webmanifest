@@ -1,0 +1,51 @@
+{
+  "name": "HelmHub",
+  "short_name": "HelmHub",
+  "description": "Your personal command center",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#4361ee",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Add Task",
+      "short_name": "Task",
+      "url": "/tasks?action=new",
+      "description": "Quick add a task"
+    },
+    {
+      "name": "Notes",
+      "short_name": "Notes",
+      "url": "/notes",
+      "description": "Open notes"
+    },
+    {
+      "name": "Focus Mode",
+      "short_name": "Focus",
+      "url": "/focus",
+      "description": "Enter focus mode"
+    }
+  ]
+}

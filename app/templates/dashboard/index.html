@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header dashboard-header">
+  <div class="greeting-block">
+    <h1 class="greeting" id="greeting-text">
+      {{ greeting }}, {{ current_user.username }}
+    </h1>
+    <div class="date-time-block">
+      <p class="current-date">
+        {{ now.strftime('%A, %B %-d, %Y') }}
+      </p>
+      <p class="current-time" id="live-clock" aria-live="off" aria-atomic="true">
+        {{ now.strftime('%-I:%M %p') if (user_settings and user_settings.time_format == '12') else now.strftime('%H:%M') }}
+      </p>
+    </div>
+  </div>
+  <!-- Quick action buttons -->
+  <div class="quick-actions" aria-label="Quick actions">
+    <button class="btn btn-primary btn-sm" onclick="openQuickCapture('task')" aria-label="Add task">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Task
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('note')" aria-label="Add note">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Note
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('reminder')" aria-label="Add reminder">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Reminder
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="openQuickCapture('event')" aria-label="Add event">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Event
+    </button>
+  </div>
+</div>
+
+<!-- Stats Row -->
+<div class="stats-row" aria-label="Summary statistics">
+  <div class="stat-badge {% if overdue_count > 0 %}stat-badge-danger{% endif %}">
+    <span class="stat-value">{{ overdue_count }}</span>
+    <span class="stat-label">Overdue</span>
+  </div>
+  <div class="stat-badge">
+    <span class="stat-value">{{ today_tasks | length }}</span>
+    <span class="stat-label">Due Today</span>
+  </div>
+  <div class="stat-badge {% if due_reminders | length > 0 %}stat-badge-warning{% endif %}">
+    <span class="stat-value">{{ due_reminders | length }}</span>
+    <span class="stat-label">Reminders</span>
+  </div>
+  <a href="/events" class="stat-badge stat-badge-link">
+    <span class="stat-value">{{ today_events | length }}</span>
+    <span class="stat-label">Events Today</span>
+  </a>
+</div>
+
+<!-- Dashboard Cards Grid -->
+<div class="dashboard-grid">
+
+  <!-- Focus Card: Top Priority Tasks -->
+  <section class="card dashboard-card card-focus" aria-labelledby="focus-card-title">
+    <div class="card-header">
+      <h2 class="card-title" id="focus-card-title">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+          <circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M9 2v2M9 14v2M2 9h2M14 9h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        Focus
+      </h2>
+      <a href="/tasks?view=priority" class="card-action-link">View all</a>
+    </div>
+    <div class="card-body">
+      {% if top_tasks %}
+        <ul class="task-list" role="list">
+          {% for task in top_tasks[:3] %}
+            <li class="task-item {% if task.is_overdue %}overdue{% endif %}" id="task-{{ task.id }}">
+              <span class="task-priority priority-{{ task.priority }}" aria-label="{{ task.priority }} priority" title="{{ task.priority }} priority"></span>
+              <div class="task-content">
+                <span class="task-title {% if task.status == 'completed' %}completed{% endif %}">{{ task.title }}</span>
+                {% if task.due_at %}
+                  <span class="task-due {% if task.is_overdue %}overdue-text{% endif %}">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M6 3v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    {{ task.due_at | format_datetime }}
+                  </span>
+                {% endif %}
+              </div>
+              <div class="task-actions">
+                <button
+                  hx-post="/tasks/{{ task.id }}/complete"
+                  hx-target="#task-{{ task.id }}"
+                  hx-swap="outerHTML"
+                  hx-include="[name=csrf_token]"
+                  class="btn-icon btn-complete {% if task.status == 'completed' %}completed{% endif %}"
+                  aria-label="Mark complete"
+                  title="Mark as complete"
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+                    {% if task.status == 'completed' %}
+                      <path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                    {% endif %}
+                  </svg>
+                </button>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <p>No priority tasks. You're on top of things!</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Today's Tasks Card -->
+  <section class="card dashboard-card card-today" aria-labelledby="today-card-title">
+    <div class="card-header">
+      <h2 class="card-title" id="today-card-title">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M5 1v3M13 1v3M2 7h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        Today
+      </h2>
+      <a href="/tasks?view=today" class="card-action-link">View all</a>
+    </div>
+    <div class="card-body">
+      {% if today_tasks %}
+        <ul class="task-list" role="list">
+          {% for task in today_tasks %}
+            <li class="task-item {% if task.is_overdue %}overdue{% endif %}" id="today-task-{{ task.id }}">
+              <span class="task-priority priority-{{ task.priority }}" aria-label="{{ task.priority }} priority" title="{{ task.priority }} priority"></span>
+              <div class="task-content">
+                <span class="task-title {% if task.status == 'completed' %}completed{% endif %}">{{ task.title }}</span>
+                {% if task.due_at %}
+                  <span class="task-due {% if task.is_overdue %}overdue-text{% endif %}">{{ task.due_at | format_time }}</span>
+                {% endif %}
+              </div>
+              <button
+                hx-post="/tasks/{{ task.id }}/complete"
+                hx-target="#today-task-{{ task.id }}"
+                hx-swap="outerHTML"
+                hx-include="[name=csrf_token]"
+                class="btn-icon btn-complete {% if task.status == 'completed' %}completed{% endif %}"
+                aria-label="Mark complete"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+                  {% if task.status == 'completed' %}
+                    <path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                  {% endif %}
+                </svg>
+              </button>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <p>Nothing due today. Enjoy your day!</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Next Event Card -->
+  <section class="card dashboard-card card-event" aria-labelledby="event-card-title">
+    <div class="card-header">
+      <h2 class="card-title" id="event-card-title">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="2" y="2.5" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M5 1v3M13 1v3M2 7h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+          <path d="M5 11h8M5 14h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Next Event
+      </h2>
+      <a href="/events" class="card-action-link">Calendar</a>
+    </div>
+    <div class="card-body">
+      {% if next_event %}
+        <div class="event-item event-item-featured">
+          <div class="event-time-block">
+            <span class="event-time-start">{{ next_event.start_at | format_time }}</span>
+            {% if next_event.end_at %}
+              <span class="event-time-sep">—</span>
+              <span class="event-time-end">{{ next_event.end_at | format_time }}</span>
+            {% endif %}
+          </div>
+          <div class="event-details">
+            <span class="event-title">{{ next_event.title }}</span>
+            {% if next_event.location %}
+              <span class="event-location">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M6 1C4.07 1 2.5 2.57 2.5 4.5c0 2.625 3.5 6.5 3.5 6.5s3.5-3.875 3.5-6.5C9.5 2.57 7.93 1 6 1z" stroke="currentColor" stroke-width="1.25"/>
+                  <circle cx="6" cy="4.5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
+                </svg>
+                {{ next_event.location }}
+              </span>
+            {% endif %}
+            {% if next_event.notes %}
+              <p class="event-notes-preview">{{ next_event.notes | truncate(80) }}</p>
+            {% endif %}
+          </div>
+          <a href="/events/{{ next_event.id }}/edit" class="btn-icon" aria-label="Edit event">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
+
+        {% if today_events | length > 1 %}
+          <p class="card-footer-note">+{{ today_events | length - 1 }} more today</p>
+        {% endif %}
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <p>No upcoming events.</p>
+          <button class="btn btn-ghost btn-sm" onclick="openQuickCapture('event')">Add one</button>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Reminders Card -->
+  <section class="card dashboard-card card-reminders" aria-labelledby="reminders-card-title">
+    <div class="card-header">
+      <h2 class="card-title" id="reminders-card-title">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 2a5 5 0 015 5c0 2.5.75 3.5 1.5 4.5H2.5C3.25 10.5 4 9.5 4 7a5 5 0 015-5z" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M7 15.5a2 2 0 004 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+        Reminders
+        {% if due_reminders %}
+          <span class="badge badge-warning" aria-label="{{ due_reminders | length }} due">{{ due_reminders | length }}</span>
+        {% endif %}
+      </h2>
+      <a href="/reminders" class="card-action-link">View all</a>
+    </div>
+    <div class="card-body">
+      {% if due_reminders %}
+        <ul class="reminder-list" role="list">
+          {% for reminder in due_reminders %}
+            <li class="reminder-item due" id="reminder-{{ reminder.id }}">
+              <div class="reminder-content">
+                <span class="reminder-title">{{ reminder.title }}</span>
+                <span class="reminder-time">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M6 3v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  {{ reminder.remind_at | format_datetime }}
+                </span>
+              </div>
+              <div class="reminder-actions">
+                <!-- Snooze dropdown -->
+                <div class="dropdown" id="snooze-dropdown-{{ reminder.id }}">
+                  <button class="btn-icon" onclick="toggleDropdown('snooze-dropdown-{{ reminder.id }}')" aria-label="Snooze reminder" aria-haspopup="true">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M8 4.5v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <div class="dropdown-menu" role="menu" hidden>
+                    <button
+                      class="dropdown-item"
+                      hx-post="/reminders/{{ reminder.id }}/snooze"
+                      hx-vals='{"minutes": 15}'
+                      hx-target="#reminder-{{ reminder.id }}"
+                      hx-swap="outerHTML"
+                      hx-include="[name=csrf_token]"
+                      role="menuitem"
+                    >15 minutes</button>
+                    <button
+                      class="dropdown-item"
+                      hx-post="/reminders/{{ reminder.id }}/snooze"
+                      hx-vals='{"minutes": 60}'
+                      hx-target="#reminder-{{ reminder.id }}"
+                      hx-swap="outerHTML"
+                      hx-include="[name=csrf_token]"
+                      role="menuitem"
+                    >1 hour</button>
+                    <button
+                      class="dropdown-item"
+                      hx-post="/reminders/{{ reminder.id }}/snooze"
+                      hx-vals='{"minutes": 1440}'
+                      hx-target="#reminder-{{ reminder.id }}"
+                      hx-swap="outerHTML"
+                      hx-include="[name=csrf_token]"
+                      role="menuitem"
+                    >Tomorrow</button>
+                  </div>
+                </div>
+                <!-- Dismiss -->
+                <button
+                  hx-post="/reminders/{{ reminder.id }}/dismiss"
+                  hx-target="#reminder-{{ reminder.id }}"
+                  hx-swap="outerHTML"
+                  hx-include="[name=csrf_token]"
+                  class="btn-icon"
+                  aria-label="Dismiss reminder"
+                  title="Dismiss"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <p>No reminders due right now.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Recent Notes Card -->
+  <section class="card dashboard-card card-notes" aria-labelledby="notes-card-title">
+    <div class="card-header">
+      <h2 class="card-title" id="notes-card-title">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M4.5 1.5h7l4 4v11a1 1 0 01-1 1h-10a1 1 0 01-1-1v-14a1 1 0 011-1z" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M11.5 1.5V5.5h4M5.5 8h7M5.5 11h7M5.5 14h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Recent Notes
+      </h2>
+      <a href="/notes" class="card-action-link">All notes</a>
+    </div>
+    <div class="card-body">
+      {% if recent_notes %}
+        <ul class="notes-preview-list" role="list">
+          {% for note in recent_notes[:4] %}
+            <li class="note-preview-item">
+              <a href="/notes/{{ note.id }}/edit" class="note-preview-link">
+                {% if note.title %}
+                  <span class="note-preview-title">{{ note.title }}</span>
+                {% endif %}
+                <span class="note-preview-body">{{ note.body | truncate(100) }}</span>
+                {% if note.tag %}
+                  <span class="tag-badge">{{ note.tag }}</span>
+                {% endif %}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty-state empty-state-sm">
+          <p>No notes yet.</p>
+          <button class="btn btn-ghost btn-sm" onclick="openQuickCapture('note')">Write one</button>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+</div><!-- /.dashboard-grid -->
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Live clock
+  function updateClock() {
+    var clock = document.getElementById('live-clock');
+    if (!clock) return;
+    var now = new Date();
+    var use12 = {{ 'true' if user_settings and user_settings.time_format == '12' else 'false' }};
+    var hours, minutes, ampm;
+    minutes = String(now.getMinutes()).padStart(2, '0');
+    if (use12) {
+      ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+      hours = now.getHours() % 12 || 12;
+      clock.textContent = hours + ':' + minutes + ' ' + ampm;
+    } else {
+      hours = String(now.getHours()).padStart(2, '0');
+      clock.textContent = hours + ':' + minutes;
+    }
+  }
+  updateClock();
+  setInterval(updateClock, 10000);
+
+  // Greeting based on time
+  function updateGreeting() {
+    var greetEl = document.getElementById('greeting-text');
+    if (!greetEl) return;
+    var hour = new Date().getHours();
+    var period = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+    var username = '{{ current_user.username }}';
+    greetEl.textContent = 'Good ' + period + ', ' + username;
+  }
+  updateGreeting();
+
+  // Dropdown toggle
+  function toggleDropdown(id) {
+    var dropdown = document.getElementById(id);
+    if (!dropdown) return;
+    var menu = dropdown.querySelector('.dropdown-menu');
+    if (menu) menu.hidden = !menu.hidden;
+  }
+
+  // Close dropdowns on outside click
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown')) {
+      document.querySelectorAll('.dropdown-menu').forEach(function(m) { m.hidden = true; });
+    }
+  });
+</script>
+{% endblock %}

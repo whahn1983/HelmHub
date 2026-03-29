@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Mode — HelmHub{% endblock %}
+
+{% block body_class %} focus-mode-page{% endblock %}
+
+{% block sidebar %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+{% block fab %}{% endblock %}
+{% block quick_capture_modal %}{% endblock %}
+
+{% block full_page %}
+<div class="focus-shell" id="focus-shell">
+
+  <!-- Minimal Focus Header -->
+  <header class="focus-header" role="banner">
+    <a href="/" class="focus-home-btn btn-icon" aria-label="Exit focus mode" title="Exit focus mode">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+        <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M10 2v2M10 16v2M2 10h2M16 10h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+      </svg>
+    </a>
+    <span class="focus-header-title">Focus</span>
+    <a href="/" class="focus-exit-btn btn btn-ghost btn-sm" aria-label="Exit focus mode">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+      </svg>
+      Exit
+    </a>
+  </header>
+
+  <!-- Main focus area -->
+  <main class="focus-main" id="main-content">
+
+    <!-- Live Clock -->
+    <div class="focus-clock-block" aria-label="Current time">
+      <div class="focus-clock" id="focus-clock" aria-live="off" aria-atomic="true">
+        {{ now.strftime('%-I:%M') if user_settings and user_settings.time_format == '12' else now.strftime('%H:%M') }}
+      </div>
+      <div class="focus-clock-detail">
+        <span class="focus-ampm" id="focus-ampm">
+          {{ now.strftime('%p') if user_settings and user_settings.time_format == '12' else '' }}
+        </span>
+        <span class="focus-date" id="focus-date">
+          {{ now.strftime('%A, %B %-d') }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Focus Task -->
+    <section class="focus-task-section" aria-labelledby="focus-task-label">
+      <h2 class="focus-section-label" id="focus-task-label">Current Focus</h2>
+      {% if focus_task %}
+        <div class="focus-task-card" id="focus-task-{{ focus_task.id }}">
+          <span class="focus-task-priority priority-dot priority-{{ focus_task.priority }}" aria-label="{{ focus_task.priority }} priority"></span>
+          <div class="focus-task-content">
+            <span class="focus-task-title">{{ focus_task.title }}</span>
+            {% if focus_task.due_at %}
+              <span class="focus-task-due">Due {{ focus_task.due_at | format_datetime }}</span>
+            {% endif %}
+            {% if focus_task.notes %}
+              <p class="focus-task-notes">{{ focus_task.notes }}</p>
+            {% endif %}
+          </div>
+          <button
+            hx-post="/tasks/{{ focus_task.id }}/complete"
+            hx-target="#focus-task-{{ focus_task.id }}"
+            hx-swap="outerHTML"
+            hx-include="[name=csrf_token]"
+            class="focus-complete-btn btn btn-primary"
+            aria-label="Mark task as complete"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Done
+          </button>
+        </div>
+        {% if top_tasks is defined and top_tasks | length > 1 %}
+          <div class="focus-task-queue">
+            <p class="focus-queue-label">Up next:</p>
+            <ul class="focus-queue-list" role="list">
+              {% for task in top_tasks[1:3] %}
+                <li class="focus-queue-item">
+                  <span class="priority-dot priority-{{ task.priority }}" aria-hidden="true"></span>
+                  {{ task.title }}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="focus-empty-task">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="1.75" opacity="0.3"/>
+            <path d="M13 20l5 5 9-10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+          </svg>
+          <p>All clear — no tasks to focus on.</p>
+          <a href="/tasks" class="btn btn-ghost btn-sm">Pick a task</a>
+        </div>
+      {% endif %}
+    </section>
+
+    <!-- Next Event -->
+    {% if next_event %}
+      <section class="focus-event-section" aria-labelledby="focus-event-label">
+        <h2 class="focus-section-label" id="focus-event-label">Next Event</h2>
+        <div class="focus-event-card">
+          <div class="focus-event-time">
+            {{ next_event.start_at | format_time }}
+            {% if next_event.end_at %}
+              <span aria-hidden="true"> — </span>{{ next_event.end_at | format_time }}
+            {% endif %}
+          </div>
+          <div class="focus-event-info">
+            <span class="focus-event-title">{{ next_event.title }}</span>
+            {% if next_event.location %}
+              <span class="focus-event-location">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M6 1C4.07 1 2.5 2.57 2.5 4.5c0 2.625 3.5 6.5 3.5 6.5s3.5-3.875 3.5-6.5C9.5 2.57 7.93 1 6 1z" stroke="currentColor" stroke-width="1.25"/>
+                  <circle cx="6" cy="4.5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
+                </svg>
+                {{ next_event.location }}
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <!-- Focus Timer -->
+    <section class="focus-timer-section" aria-labelledby="focus-timer-label">
+      <h2 class="focus-section-label" id="focus-timer-label">Timer</h2>
+      <div class="focus-timer">
+        <div class="timer-display" id="timer-display" role="timer" aria-live="off" aria-atomic="true" aria-label="Timer display">
+          <span id="timer-minutes">25</span><span class="timer-colon" aria-hidden="true">:</span><span id="timer-seconds">00</span>
+        </div>
+        <div class="timer-controls" aria-label="Timer controls">
+          <button
+            class="timer-btn btn btn-secondary"
+            id="timer-start-btn"
+            onclick="timerToggle()"
+            aria-label="Start timer"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" id="timer-play-icon">
+              <path d="M4.5 3l9 5-9 5V3z" fill="currentColor"/>
+            </svg>
+            <span id="timer-btn-label">Start</span>
+          </button>
+          <button class="timer-btn btn btn-ghost" onclick="timerReset()" aria-label="Reset timer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 8A5.5 5.5 0 019 2.5H6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M6.5 0v4H2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Reset
+          </button>
+        </div>
+        <div class="timer-presets" aria-label="Timer duration presets">
+          <button class="timer-preset-btn active" onclick="setTimerDuration(25)" data-duration="25" aria-pressed="true">25 min</button>
+          <button class="timer-preset-btn" onclick="setTimerDuration(45)" data-duration="45" aria-pressed="false">45 min</button>
+          <button class="timer-preset-btn" onclick="setTimerDuration(5)" data-duration="5" aria-pressed="false">5 min break</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- CSRF for HTMX -->
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+</div><!-- /.focus-shell -->
+{% endblock full_page %}
+
+{% block scripts %}
+<script>
+  // Live clock
+  var use12Hour = {{ 'true' if user_settings and user_settings.time_format == '12' else 'false' }};
+
+  function updateFocusClock() {
+    var now = new Date();
+    var clockEl = document.getElementById('focus-clock');
+    var ampmEl = document.getElementById('focus-ampm');
+    var dateEl = document.getElementById('focus-date');
+
+    if (clockEl) {
+      var h, m;
+      m = String(now.getMinutes()).padStart(2, '0');
+      if (use12Hour) {
+        h = now.getHours() % 12 || 12;
+        if (ampmEl) ampmEl.textContent = now.getHours() >= 12 ? 'PM' : 'AM';
+      } else {
+        h = String(now.getHours()).padStart(2, '0');
+        if (ampmEl) ampmEl.textContent = '';
+      }
+      clockEl.textContent = h + ':' + m;
+    }
+
+    if (dateEl) {
+      var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      dateEl.textContent = days[now.getDay()] + ', ' + months[now.getMonth()] + ' ' + now.getDate();
+    }
+  }
+
+  updateFocusClock();
+  setInterval(updateFocusClock, 1000);
+
+  // Timer state
+  var timerInterval = null;
+  var timerRunning = false;
+  var timerTotalSeconds = 25 * 60;
+  var timerRemaining = timerTotalSeconds;
+
+  function updateTimerDisplay() {
+    var mins = Math.floor(timerRemaining / 60);
+    var secs = timerRemaining % 60;
+    var mEl = document.getElementById('timer-minutes');
+    var sEl = document.getElementById('timer-seconds');
+    if (mEl) mEl.textContent = String(mins).padStart(2, '0');
+    if (sEl) sEl.textContent = String(secs).padStart(2, '0');
+    if (timerRunning) {
+      document.title = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + ' — Focus';
+    }
+  }
+
+  function timerToggle() {
+    if (timerRunning) {
+      clearInterval(timerInterval);
+      timerRunning = false;
+      document.title = 'Focus Mode — HelmHub';
+    } else {
+      timerInterval = setInterval(function() {
+        if (timerRemaining > 0) {
+          timerRemaining--;
+          updateTimerDisplay();
+        } else {
+          clearInterval(timerInterval);
+          timerRunning = false;
+          document.title = 'Focus Mode — HelmHub';
+          timerDone();
+        }
+      }, 1000);
+      timerRunning = true;
+    }
+
+    var icon = document.getElementById('timer-play-icon');
+    var label = document.getElementById('timer-btn-label');
+    var startBtn = document.getElementById('timer-start-btn');
+
+    if (timerRunning) {
+      if (icon) icon.innerHTML = '<rect x="3" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor"/>';
+      if (label) label.textContent = 'Pause';
+      if (startBtn) startBtn.setAttribute('aria-label', 'Pause timer');
+    } else {
+      if (icon) icon.innerHTML = '<path d="M4.5 3l9 5-9 5V3z" fill="currentColor"/>';
+      if (label) label.textContent = 'Start';
+      if (startBtn) startBtn.setAttribute('aria-label', 'Start timer');
+    }
+    updateTimerDisplay();
+  }
+
+  function timerReset() {
+    if (timerRunning) {
+      clearInterval(timerInterval);
+      timerRunning = false;
+      document.title = 'Focus Mode — HelmHub';
+    }
+    timerRemaining = timerTotalSeconds;
+    updateTimerDisplay();
+    var icon = document.getElementById('timer-play-icon');
+    var label = document.getElementById('timer-btn-label');
+    var startBtn = document.getElementById('timer-start-btn');
+    if (icon) icon.innerHTML = '<path d="M4.5 3l9 5-9 5V3z" fill="currentColor"/>';
+    if (label) label.textContent = 'Start';
+    if (startBtn) startBtn.setAttribute('aria-label', 'Start timer');
+  }
+
+  function setTimerDuration(minutes) {
+    timerReset();
+    timerTotalSeconds = minutes * 60;
+    timerRemaining = timerTotalSeconds;
+    updateTimerDisplay();
+    document.querySelectorAll('.timer-preset-btn').forEach(function(btn) {
+      var active = parseInt(btn.dataset.duration) === minutes;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function timerDone() {
+    updateTimerDisplay();
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('HelmHub Focus', {
+        body: 'Timer complete! Take a break.',
+        icon: '/static/icons/icon-192.png'
+      });
+    }
+    var display = document.getElementById('timer-display');
+    if (display) {
+      display.classList.add('timer-done');
+      setTimeout(function() { display.classList.remove('timer-done'); }, 3000);
+    }
+    // Audible beep via Web Audio API
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 528;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.5);
+    } catch (e) {}
+  }
+
+  // Request notification permission
+  document.addEventListener('DOMContentLoaded', function() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  });
+</script>
+{% endblock %}

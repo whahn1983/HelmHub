@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HelmHub">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="HelmHub - Your personal command center">
+  <title>{% block title %}HelmHub{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body class="theme-{{ user_settings.theme if user_settings else 'system' }}{% block body_class %}{% endblock %}">
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container" id="flash-container" aria-live="polite">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}" role="alert">
+            <span class="flash-message">{{ message }}</span>
+            <button class="flash-close" onclick="this.parentElement.remove()" aria-label="Dismiss">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block full_page %}
+  <!-- App Shell -->
+  <div class="app-shell" id="app-shell">
+
+    <!-- Left Sidebar (desktop) -->
+    {% block sidebar %}
+    <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <a href="/" class="sidebar-brand">
+          <svg class="brand-icon" width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="2"/>
+            <circle cx="14" cy="14" r="4" fill="currentColor"/>
+            <path d="M14 2v4M14 22v4M2 14h4M22 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="brand-name">HelmHub</span>
+        </a>
+      </div>
+
+      <ul class="sidebar-nav" role="list">
+        <li>
+          <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}" aria-current="{{ 'page' if request.path == '/' else 'false' }}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+              <rect x="12" y="1" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+              <rect x="1" y="12" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+              <rect x="12" y="12" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+            </svg>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="/tasks?view=today" class="nav-link {% if request.path == '/tasks' and request.args.get('view') == 'today' %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M6 1v4M14 1v4M2 8h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+              <path d="M6 12h1M10 12h1M14 12h1M6 15h1M10 15h1M14 15h1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>Today</span>
+          </a>
+        </li>
+        <li>
+          <a href="/tasks" class="nav-link {% if request.path == '/tasks' and not request.args.get('view') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M6.5 10l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Tasks</span>
+          </a>
+        </li>
+        <li>
+          <a href="/notes" class="nav-link {% if request.path.startswith('/notes') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5 2h8l4 4v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M13 2v4h4M6 9h8M6 12h8M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Notes</span>
+          </a>
+        </li>
+        <li>
+          <a href="/reminders" class="nav-link {% if request.path.startswith('/reminders') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 2a6 6 0 016 6c0 3 1 4 2 5H2c1-1 2-2 2-5a6 6 0 016-6z" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M8 17a2 2 0 004 0" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+            <span>Reminders</span>
+          </a>
+        </li>
+        <li>
+          <a href="/events" class="nav-link {% if request.path.startswith('/events') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M6 1v4M14 1v4M2 8h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+            <span>Events</span>
+          </a>
+        </li>
+        <li>
+          <a href="/focus" class="nav-link {% if request.path.startswith('/focus') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+              <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M10 2v2M10 16v2M2 10h2M16 10h2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+            <span>Focus</span>
+          </a>
+        </li>
+        <li>
+          <a href="/settings" class="nav-link {% if request.path.startswith('/settings') %}active{% endif %}">
+            <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.75"/>
+              <path d="M10 2.5V1M10 19v-1.5M17.5 10H19M1 10h1.5M15.4 4.6l1.06-1.06M3.54 16.46l1.06-1.06M15.4 15.4l1.06 1.06M3.54 3.54l1.06 1.06" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+              <path d="M10 5.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" stroke="currentColor" stroke-width="1.75"/>
+            </svg>
+            <span>Settings</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        {% if current_user.is_authenticated %}
+        <div class="sidebar-user">
+          <span class="sidebar-username">{{ current_user.username }}</span>
+          <a href="/auth/logout" class="btn-icon" title="Logout" aria-label="Logout">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M7 3H3a1 1 0 00-1 1v10a1 1 0 001 1h4M12 13l4-4-4-4M16 9H7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </nav>
+    {% endblock sidebar %}
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div><!-- /.app-shell -->
+
+  <!-- Bottom Navigation (mobile) -->
+  {% block bottom_nav %}
+  <nav class="bottom-nav" aria-label="Mobile navigation">
+    <a href="/" class="bottom-nav-item {% if request.path == '/' %}active{% endif %}" aria-label="Dashboard" aria-current="{{ 'page' if request.path == '/' else 'false' }}">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+        <rect x="12" y="1" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+        <rect x="1" y="12" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+        <rect x="12" y="12" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.75"/>
+      </svg>
+      <span>Dashboard</span>
+    </a>
+    <a href="/tasks?view=today" class="bottom-nav-item {% if request.path == '/tasks' and request.args.get('view') == 'today' %}active{% endif %}" aria-label="Today">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <rect x="2" y="3" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M6 1v4M14 1v4M2 8h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        <path d="M6 12h1M10 12h1M14 12h1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>Today</span>
+    </a>
+    <a href="/tasks" class="bottom-nav-item {% if request.path == '/tasks' and not request.args.get('view') %}active{% endif %}" aria-label="Tasks">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M6.5 10l2.5 2.5 4.5-4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Tasks</span>
+    </a>
+    <a href="/notes" class="bottom-nav-item {% if request.path.startswith('/notes') %}active{% endif %}" aria-label="Notes">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M5 2h8l4 4v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M13 2v4h4M6 9h8M6 12h8M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>Notes</span>
+    </a>
+    <a href="/settings" class="bottom-nav-item {% if request.path.startswith('/settings') %}active{% endif %}" aria-label="Settings">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.75"/>
+        <path d="M10 5.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z" stroke="currentColor" stroke-width="1.75"/>
+      </svg>
+      <span>Settings</span>
+    </a>
+  </nav>
+  {% endblock bottom_nav %}
+
+  <!-- Floating Action Button -->
+  {% block fab %}
+  <button class="fab" id="fab-btn" onclick="openQuickCapture()" aria-label="Quick capture" title="Quick capture">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+  </button>
+  {% endblock fab %}
+
+  <!-- Quick Capture Modal -->
+  {% block quick_capture_modal %}
+  <div class="modal-overlay" id="quick-capture-overlay" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title" hidden>
+    <div class="modal" id="quick-capture-modal">
+      <div class="modal-header">
+        <h2 class="modal-title" id="quick-capture-title">Quick Capture</h2>
+        <button class="modal-close btn-icon" onclick="closeQuickCapture()" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="modal-tabs" role="tablist" aria-label="Capture type">
+        <button class="modal-tab active" role="tab" aria-selected="true" aria-controls="tab-task" id="tab-btn-task" onclick="switchTab('task')">Task</button>
+        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-note" id="tab-btn-note" onclick="switchTab('note')">Note</button>
+        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-reminder" id="tab-btn-reminder" onclick="switchTab('reminder')">Reminder</button>
+        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-event" id="tab-btn-event" onclick="switchTab('event')">Event</button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- Task Tab -->
+        <div class="tab-panel active" id="tab-task" role="tabpanel" aria-labelledby="tab-btn-task">
+          <form hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type" value="task">
+            <div class="form-group">
+              <label for="qc-task-title" class="form-label">Task title</label>
+              <input type="text" id="qc-task-title" name="title" class="form-input" placeholder="What needs to be done?" required autocomplete="off">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="qc-task-priority" class="form-label">Priority</label>
+                <select id="qc-task-priority" name="priority" class="form-select">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="qc-task-due" class="form-label">Due date</label>
+                <input type="date" id="qc-task-due" name="due_date" class="form-input">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add Task</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Note Tab -->
+        <div class="tab-panel" id="tab-note" role="tabpanel" aria-labelledby="tab-btn-note" hidden>
+          <form hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type" value="note">
+            <div class="form-group">
+              <label for="qc-note-title" class="form-label">Title (optional)</label>
+              <input type="text" id="qc-note-title" name="title" class="form-input" placeholder="Note title..." autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="qc-note-body" class="form-label">Content</label>
+              <textarea id="qc-note-body" name="body" class="form-textarea" rows="4" placeholder="Write your note..." required></textarea>
+            </div>
+            <div class="form-group">
+              <label for="qc-note-tag" class="form-label">Tag (optional)</label>
+              <input type="text" id="qc-note-tag" name="tag" class="form-input" placeholder="e.g. work, personal..." autocomplete="off">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save Note</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Reminder Tab -->
+        <div class="tab-panel" id="tab-reminder" role="tabpanel" aria-labelledby="tab-btn-reminder" hidden>
+          <form hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type" value="reminder">
+            <div class="form-group">
+              <label for="qc-reminder-title" class="form-label">Reminder</label>
+              <input type="text" id="qc-reminder-title" name="title" class="form-input" placeholder="Remind me to..." required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="qc-reminder-at" class="form-label">When</label>
+              <input type="datetime-local" id="qc-reminder-at" name="remind_at" class="form-input" required>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Set Reminder</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Event Tab -->
+        <div class="tab-panel" id="tab-event" role="tabpanel" aria-labelledby="tab-btn-event" hidden>
+          <form hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="type" value="event">
+            <div class="form-group">
+              <label for="qc-event-title" class="form-label">Event title</label>
+              <input type="text" id="qc-event-title" name="title" class="form-input" placeholder="Event name..." required autocomplete="off">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="qc-event-start" class="form-label">Start</label>
+                <input type="datetime-local" id="qc-event-start" name="start_at" class="form-input" required>
+              </div>
+              <div class="form-group">
+                <label for="qc-event-end" class="form-label">End</label>
+                <input type="datetime-local" id="qc-event-end" name="end_at" class="form-input">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="qc-event-location" class="form-label">Location (optional)</label>
+              <input type="text" id="qc-event-location" name="location" class="form-input" placeholder="Where?" autocomplete="off">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add Event</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Result area -->
+        <div id="quick-capture-result" class="quick-capture-result" aria-live="polite"></div>
+
+      </div><!-- /.modal-body -->
+    </div><!-- /.modal -->
+  </div><!-- /.modal-overlay -->
+  {% endblock quick_capture_modal %}
+
+  <!-- PWA Install Banner -->
+  <div class="pwa-banner" id="pwa-banner" hidden role="banner" aria-label="Install app">
+    <div class="pwa-banner-content">
+      <svg width="20" height="20" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+        <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="2"/>
+        <circle cx="14" cy="14" r="4" fill="currentColor"/>
+      </svg>
+      <span>Install HelmHub for quick access</span>
+    </div>
+    <div class="pwa-banner-actions">
+      <button class="btn btn-primary btn-sm" id="pwa-install-btn">Install</button>
+      <button class="btn btn-ghost btn-sm" onclick="dismissPWABanner()">Not now</button>
+    </div>
+  </div>
+
+  {% endblock full_page %}
+
+  <!-- Scripts -->
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/app.js" defer></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js')
+          .then(function(reg) {
+            console.log('SW registered:', reg.scope);
+          })
+          .catch(function(err) {
+            console.warn('SW registration failed:', err);
+          });
+      });
+    }
+
+    // Flash message auto-dismiss
+    window.addEventListener('DOMContentLoaded', function() {
+      var flashes = document.querySelectorAll('.flash');
+      flashes.forEach(function(flash) {
+        setTimeout(function() {
+          flash.style.opacity = '0';
+          flash.style.transform = 'translateY(-8px)';
+          setTimeout(function() { flash.remove(); }, 300);
+        }, 3000);
+      });
+    });
+
+    // Quick capture modal
+    function openQuickCapture(tab) {
+      var overlay = document.getElementById('quick-capture-overlay');
+      overlay.hidden = false;
+      document.body.classList.add('modal-open');
+      if (tab) switchTab(tab);
+      var firstInput = overlay.querySelector('input:not([type=hidden])');
+      if (firstInput) firstInput.focus();
+    }
+
+    function closeQuickCapture() {
+      var overlay = document.getElementById('quick-capture-overlay');
+      overlay.hidden = true;
+      document.body.classList.remove('modal-open');
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.modal-tab').forEach(function(btn) {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.tab-panel').forEach(function(panel) {
+        panel.classList.remove('active');
+        panel.hidden = true;
+      });
+      var activeBtn = document.getElementById('tab-btn-' + tab);
+      var activePanel = document.getElementById('tab-' + tab);
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-selected', 'true');
+      }
+      if (activePanel) {
+        activePanel.classList.add('active');
+        activePanel.hidden = false;
+      }
+    }
+
+    // Close modal on overlay click
+    document.addEventListener('DOMContentLoaded', function() {
+      var overlay = document.getElementById('quick-capture-overlay');
+      if (overlay) {
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) closeQuickCapture();
+        });
+      }
+    });
+
+    // Close modal on Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeQuickCapture();
+    });
+
+    // PWA install prompt
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      var banner = document.getElementById('pwa-banner');
+      if (banner && !localStorage.getItem('pwa-dismissed')) {
+        banner.hidden = false;
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var installBtn = document.getElementById('pwa-install-btn');
+      if (installBtn) {
+        installBtn.addEventListener('click', function() {
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(function() {
+              deferredPrompt = null;
+              dismissPWABanner();
+            });
+          }
+        });
+      }
+    });
+
+    function dismissPWABanner() {
+      localStorage.setItem('pwa-dismissed', '1');
+      var banner = document.getElementById('pwa-banner');
+      if (banner) banner.hidden = true;
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Two-Factor Authentication — HelmHub{% endblock %}
+
+{% block body_class %} auth-page{% endblock %}
+
+{% block sidebar %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+{% block fab %}{% endblock %}
+{% block quick_capture_modal %}{% endblock %}
+
+{% block full_page %}
+<div class="auth-shell">
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container" id="flash-container" aria-live="polite">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}" role="alert">
+            <span class="flash-message">{{ message }}</span>
+            <button class="flash-close" onclick="this.parentElement.remove()" aria-label="Dismiss">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="auth-card">
+    <!-- Brand -->
+    <div class="auth-brand">
+      <svg class="auth-brand-icon" width="40" height="40" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+        <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="2"/>
+        <circle cx="14" cy="14" r="4" fill="currentColor"/>
+        <path d="M14 2v4M14 22v4M2 14h4M22 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <h1 class="auth-card-title">Two-Factor Authentication</h1>
+      <p class="auth-brand-tagline">Enter the code from your authenticator app</p>
+    </div>
+
+    <!-- TOTP Form -->
+    <form method="post" action="/auth/totp" class="auth-form" id="totp-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Standard TOTP Code -->
+      <div id="totp-section">
+        <div class="form-group">
+          <label for="totp_code" class="form-label">Authentication code</label>
+          <input
+            type="text"
+            id="totp_code"
+            name="totp_code"
+            class="form-input totp-input"
+            inputmode="numeric"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            placeholder="000000"
+            autocomplete="one-time-code"
+            autofocus
+            required
+            aria-describedby="totp-hint"
+          >
+          <span id="totp-hint" class="form-hint">6-digit code from your authenticator app</span>
+        </div>
+      </div>
+
+      <!-- Recovery Code Section (toggle) -->
+      <div id="recovery-section" hidden>
+        <div class="form-group">
+          <label for="recovery_code" class="form-label">Recovery code</label>
+          <input
+            type="text"
+            id="recovery_code"
+            name="recovery_code"
+            class="form-input"
+            placeholder="xxxxxxxx-xxxxxxxx"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            aria-describedby="recovery-hint"
+          >
+          <span id="recovery-hint" class="form-hint">Use a one-time recovery code if you've lost your device</span>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-full">Verify</button>
+      </div>
+    </form>
+
+    <!-- Toggle between TOTP and recovery -->
+    <div class="auth-secondary-actions">
+      <button
+        type="button"
+        id="toggle-recovery-btn"
+        class="btn-link"
+        onclick="toggleRecovery()"
+      >
+        Use a recovery code instead
+      </button>
+    </div>
+
+    <div class="auth-links">
+      <a href="/auth/login" class="auth-back-link">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Back to login
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock full_page %}
+
+{% block scripts %}
+<script>
+  var usingRecovery = false;
+
+  function toggleRecovery() {
+    usingRecovery = !usingRecovery;
+    var totpSection = document.getElementById('totp-section');
+    var recoverySection = document.getElementById('recovery-section');
+    var toggleBtn = document.getElementById('toggle-recovery-btn');
+    var totpInput = document.getElementById('totp_code');
+    var recoveryInput = document.getElementById('recovery_code');
+
+    if (usingRecovery) {
+      totpSection.hidden = true;
+      recoverySection.hidden = false;
+      totpInput.removeAttribute('required');
+      recoveryInput.setAttribute('required', '');
+      toggleBtn.textContent = 'Use authenticator code instead';
+      recoveryInput.focus();
+    } else {
+      totpSection.hidden = false;
+      recoverySection.hidden = true;
+      totpInput.setAttribute('required', '');
+      recoveryInput.removeAttribute('required');
+      toggleBtn.textContent = 'Use a recovery code instead';
+      totpInput.focus();
+    }
+  }
+
+  // Auto-submit when 6 digits entered
+  document.addEventListener('DOMContentLoaded', function() {
+    var totpInput = document.getElementById('totp_code');
+    if (totpInput) {
+      totpInput.addEventListener('input', function() {
+        var val = this.value.replace(/\D/g, '');
+        this.value = val;
+        if (val.length === 6) {
+          document.getElementById('totp-form').submit();
+        }
+      });
+    }
+
+    // Auto-dismiss flashes
+    document.querySelectorAll('.flash').forEach(function(flash) {
+      setTimeout(function() {
+        flash.style.opacity = '0';
+        setTimeout(function() { flash.remove(); }, 300);
+      }, 4000);
+    });
+  });
+</script>
+{% endblock %}

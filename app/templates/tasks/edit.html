@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{% if task %}Edit Task{% else %}New Task{% endif %} — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/tasks" class="back-link" aria-label="Back to tasks">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Tasks
+  </a>
+  <h1 class="page-title">{% if task %}Edit Task{% else %}New Task{% endif %}</h1>
+</div>
+
+<div class="card form-card">
+  <div class="card-body">
+    <form
+      method="post"
+      action="{{ '/tasks/' + task.id|string + '/edit' if task else '/tasks/new' }}"
+      class="task-edit-form"
+      novalidate
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Title -->
+      <div class="form-group">
+        <label for="task-title" class="form-label">
+          Title <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="task-title"
+          name="title"
+          class="form-input form-input-lg"
+          placeholder="What needs to be done?"
+          required
+          autofocus
+          value="{{ task.title if task else '' }}"
+        >
+      </div>
+
+      <!-- Priority -->
+      <div class="form-group">
+        <label for="task-priority" class="form-label">Priority</label>
+        <div class="priority-selector" role="radiogroup" aria-labelledby="priority-label">
+          <span id="priority-label" class="sr-only">Select priority</span>
+          {% for p in ['low', 'medium', 'high', 'urgent'] %}
+            <label class="priority-option priority-option-{{ p }}">
+              <input
+                type="radio"
+                name="priority"
+                value="{{ p }}"
+                class="sr-only"
+                {% if task and task.priority == p %}checked{% elif not task and p == 'medium' %}checked{% endif %}
+              >
+              <span class="priority-label-text">{{ p | capitalize }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Due date and time -->
+      <div class="form-row">
+        <div class="form-group">
+          <label for="task-due-date" class="form-label">Due date</label>
+          <input
+            type="date"
+            id="task-due-date"
+            name="due_date"
+            class="form-input"
+            value="{{ task.due_at.strftime('%Y-%m-%d') if task and task.due_at else '' }}"
+          >
+        </div>
+        <div class="form-group">
+          <label for="task-due-time" class="form-label">Due time</label>
+          <input
+            type="time"
+            id="task-due-time"
+            name="due_time"
+            class="form-input"
+            value="{{ task.due_at.strftime('%H:%M') if task and task.due_at else '' }}"
+          >
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label for="task-notes" class="form-label">Notes</label>
+        <textarea
+          id="task-notes"
+          name="notes"
+          class="form-textarea"
+          rows="4"
+          placeholder="Any additional details..."
+        >{{ task.notes if task and task.notes else '' }}</textarea>
+      </div>
+
+      <!-- Pinned -->
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            name="pinned"
+            id="task-pinned"
+            class="checkbox-input"
+            {% if task and task.pinned %}checked{% endif %}
+          >
+          <span class="checkbox-custom" aria-hidden="true"></span>
+          <span class="checkbox-text">Pin this task to the top</span>
+        </label>
+      </div>
+
+      <!-- Status (edit only) -->
+      {% if task %}
+        <div class="form-group">
+          <label for="task-status" class="form-label">Status</label>
+          <select id="task-status" name="status" class="form-select">
+            <option value="pending" {% if task.status == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+            <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>Completed</option>
+          </select>
+        </div>
+      {% endif %}
+
+      <!-- Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if task %}Save Changes{% else %}Add Task{% endif %}
+        </button>
+        <a href="/tasks" class="btn btn-ghost">Cancel</a>
+        {% if task %}
+          <button
+            type="button"
+            class="btn btn-danger btn-icon-text"
+            hx-post="/tasks/{{ task.id }}/delete"
+            hx-confirm="Are you sure you want to delete this task?"
+            hx-include="[name=csrf_token]"
+            hx-on::after-request="window.location.href='/tasks'"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 4.5h9M6 4.5V3h4v1.5M7 7v4M9 7v4M4.5 4.5l.5 8h6l.5-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Delete Task
+          </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if task %}
+  <!-- Task Metadata -->
+  <div class="metadata-card">
+    <dl class="metadata-list">
+      <div class="metadata-item">
+        <dt>Created</dt>
+        <dd>{{ task.created_at | format_datetime }}</dd>
+      </div>
+      {% if task.updated_at %}
+        <div class="metadata-item">
+          <dt>Last updated</dt>
+          <dd>{{ task.updated_at | format_datetime }}</dd>
+        </div>
+      {% endif %}
+      {% if task.completed_at %}
+        <div class="metadata-item">
+          <dt>Completed</dt>
+          <dd>{{ task.completed_at | format_datetime }}</dd>
+        </div>
+      {% endif %}
+    </dl>
+  </div>
+{% endif %}
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Scratchpad — HelmHub{% endblock %}
+
+{% block body_class %} scratchpad-page{% endblock %}
+
+{% block content %}
+<div class="scratchpad-layout">
+  <!-- Scratchpad Header -->
+  <div class="scratchpad-header">
+    <div class="scratchpad-header-left">
+      <a href="/notes" class="back-link" aria-label="Back to notes">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Notes
+      </a>
+      <h1 class="scratchpad-title">Scratchpad</h1>
+    </div>
+    <div class="scratchpad-header-right">
+      <!-- Save indicator -->
+      <span class="save-indicator" id="save-indicator" aria-live="polite" aria-atomic="true" hidden>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2.5 7l3.5 3.5 5.5-7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Saved
+      </span>
+      <!-- Manual save button -->
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm"
+        id="manual-save-btn"
+        onclick="saveScratchpad()"
+        aria-label="Save scratchpad"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 2h10l2 2v10a1 1 0 01-1 1H3a1 1 0 01-1-1V2z" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 2v4h6V2M5 9h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Save
+      </button>
+    </div>
+  </div>
+
+  <!-- Scratchpad Textarea -->
+  <div class="scratchpad-body">
+    <textarea
+      id="scratchpad-content"
+      name="content"
+      class="scratchpad-textarea"
+      placeholder="Start typing... Your notes are saved automatically."
+      aria-label="Scratchpad content"
+      hx-post="/notes/scratchpad"
+      hx-trigger="keyup delay:1s changed"
+      hx-target="#scratchpad-save-result"
+      hx-swap="innerHTML"
+      hx-include="[name=csrf_token]"
+      hx-on::after-request="showSaveIndicator(event)"
+      spellcheck="true"
+      autocomplete="off"
+    >{{ scratchpad_content or '' }}</textarea>
+
+    <!-- HTMX result target (hidden, just for response handling) -->
+    <div id="scratchpad-save-result" hidden aria-hidden="true"></div>
+  </div>
+
+  <!-- Scratchpad Footer -->
+  <div class="scratchpad-footer">
+    <span class="scratchpad-wordcount" id="word-count" aria-live="polite" aria-atomic="true">
+      0 words
+    </span>
+    <span class="scratchpad-hint">Auto-saves as you type</span>
+  </div>
+</div>
+
+<!-- CSRF token for HTMX -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var saveIndicatorTimer = null;
+
+  function showSaveIndicator(event) {
+    if (!event.detail || !event.detail.successful) return;
+    var indicator = document.getElementById('save-indicator');
+    if (!indicator) return;
+    indicator.hidden = false;
+    clearTimeout(saveIndicatorTimer);
+    saveIndicatorTimer = setTimeout(function() {
+      indicator.hidden = true;
+    }, 2000);
+  }
+
+  function saveScratchpad() {
+    var textarea = document.getElementById('scratchpad-content');
+    if (!textarea) return;
+    // Trigger HTMX manually
+    htmx.trigger(textarea, 'keyup');
+  }
+
+  // Word count updater
+  function updateWordCount() {
+    var textarea = document.getElementById('scratchpad-content');
+    var counter = document.getElementById('word-count');
+    if (!textarea || !counter) return;
+    var text = textarea.value.trim();
+    var words = text ? text.split(/\s+/).length : 0;
+    var chars = text.length;
+    counter.textContent = words + ' word' + (words !== 1 ? 's' : '') + ' · ' + chars + ' char' + (chars !== 1 ? 's' : '');
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var textarea = document.getElementById('scratchpad-content');
+    if (textarea) {
+      updateWordCount();
+      textarea.addEventListener('input', updateWordCount);
+      textarea.focus();
+
+      // Move cursor to end
+      var len = textarea.value.length;
+      textarea.setSelectionRange(len, len);
+    }
+
+    // Keyboard shortcut: Ctrl+S or Cmd+S to save
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveScratchpad();
+      }
+    });
+  });
+</script>
+{% endblock %}

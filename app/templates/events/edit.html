@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{% if event %}Edit Event{% else %}New Event{% endif %} — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/events" class="back-link" aria-label="Back to events">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Events
+  </a>
+  <h1 class="page-title">{% if event %}Edit Event{% else %}New Event{% endif %}</h1>
+</div>
+
+<div class="card form-card">
+  <div class="card-body">
+    <form
+      method="post"
+      action="{{ '/events/' + event.id|string + '/edit' if event else '/events/new' }}"
+      class="event-edit-form"
+      novalidate
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <!-- Title -->
+      <div class="form-group">
+        <label for="event-title" class="form-label">
+          Title <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="event-title"
+          name="title"
+          class="form-input form-input-lg"
+          placeholder="Event name..."
+          required
+          autofocus
+          value="{{ event.title if event else '' }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <!-- Start datetime -->
+      <div class="form-group">
+        <label for="event-start" class="form-label">
+          Start <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="datetime-local"
+          id="event-start"
+          name="start_at"
+          class="form-input"
+          required
+          value="{{ event.start_at.strftime('%Y-%m-%dT%H:%M') if event and event.start_at else '' }}"
+        >
+      </div>
+
+      <!-- End datetime -->
+      <div class="form-group">
+        <label for="event-end" class="form-label">End</label>
+        <input
+          type="datetime-local"
+          id="event-end"
+          name="end_at"
+          class="form-input"
+          value="{{ event.end_at.strftime('%Y-%m-%dT%H:%M') if event and event.end_at else '' }}"
+          aria-describedby="event-end-hint"
+        >
+        <span id="event-end-hint" class="form-hint">Leave blank for events with no end time</span>
+      </div>
+
+      <!-- Location -->
+      <div class="form-group">
+        <label for="event-location" class="form-label">Location</label>
+        <div class="input-with-icon">
+          <svg class="input-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 1.5C5.79 1.5 4 3.29 4 5.5c0 3.25 4 9 4 9s4-5.75 4-9c0-2.21-1.79-3.5-4-3.5z" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="8" cy="5.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <input
+            type="text"
+            id="event-location"
+            name="location"
+            class="form-input has-icon"
+            placeholder="Where is this happening?"
+            value="{{ event.location if event and event.location else '' }}"
+            autocomplete="off"
+          >
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label for="event-notes" class="form-label">Notes</label>
+        <textarea
+          id="event-notes"
+          name="notes"
+          class="form-textarea"
+          rows="4"
+          placeholder="Additional details, agenda, links..."
+        >{{ event.notes if event and event.notes else '' }}</textarea>
+      </div>
+
+      <!-- Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if event %}Save Changes{% else %}Add Event{% endif %}
+        </button>
+        <a href="/events" class="btn btn-ghost">Cancel</a>
+        {% if event %}
+          <button
+            type="button"
+            class="btn btn-danger btn-icon-text"
+            hx-post="/events/{{ event.id }}/delete"
+            hx-confirm="Delete this event?"
+            hx-include="[name=csrf_token]"
+            hx-on::after-request="window.location.href='/events'"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 4.5h9M6 4.5V3h4v1.5M7 7v4M9 7v4M4.5 4.5l.5 8h6l.5-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Delete Event
+          </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if event %}
+  <div class="metadata-card">
+    <dl class="metadata-list">
+      <div class="metadata-item">
+        <dt>Created</dt>
+        <dd>{{ event.created_at | format_datetime }}</dd>
+      </div>
+      {% if event.updated_at %}
+        <div class="metadata-item">
+          <dt>Last updated</dt>
+          <dd>{{ event.updated_at | format_datetime }}</dd>
+        </div>
+      {% endif %}
+    </dl>
+  </div>
+{% endif %}
+
+<!-- Hidden CSRF for HTMX requests -->
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-set end time to 1 hour after start when start changes and end is empty
+  document.addEventListener('DOMContentLoaded', function() {
+    var startInput = document.getElementById('event-start');
+    var endInput = document.getElementById('event-end');
+
+    if (startInput && endInput) {
+      startInput.addEventListener('change', function() {
+        if (startInput.value && !endInput.value) {
+          var startDate = new Date(startInput.value);
+          if (!isNaN(startDate.getTime())) {
+            var endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+            var pad = function(n) { return String(n).padStart(2, '0'); };
+            endInput.value = endDate.getFullYear() + '-' +
+              pad(endDate.getMonth() + 1) + '-' +
+              pad(endDate.getDate()) + 'T' +
+              pad(endDate.getHours()) + ':' +
+              pad(endDate.getMinutes());
+          }
+        }
+      });
+
+      // Validate end is after start
+      endInput.addEventListener('change', function() {
+        if (startInput.value && endInput.value) {
+          if (new Date(endInput.value) <= new Date(startInput.value)) {
+            endInput.setCustomValidity('End time must be after start time');
+          } else {
+            endInput.setCustomValidity('');
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

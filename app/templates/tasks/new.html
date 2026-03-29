@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}New Task — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/tasks" class="back-link" aria-label="Back to tasks">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Tasks
+  </a>
+  <h1 class="page-title">New Task</h1>
+</div>
+
+{% if errors %}
+  <div class="alert alert-danger" role="alert">
+    <ul class="error-list">
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="card form-card">
+  <div class="card-body">
+    <form method="post" action="/tasks/new" class="task-edit-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label for="task-title" class="form-label">
+          Title <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="task-title"
+          name="title"
+          class="form-input form-input-lg"
+          placeholder="What needs to be done?"
+          required
+          autofocus
+          value="{{ form.get('title', '') }}"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="task-priority" class="form-label">Priority</label>
+        <div class="priority-selector" role="radiogroup" aria-labelledby="priority-label">
+          <span id="priority-label" class="sr-only">Select priority</span>
+          {% for p in ['low', 'medium', 'high'] %}
+            <label class="priority-option priority-option-{{ p }}">
+              <input
+                type="radio"
+                name="priority"
+                value="{{ p }}"
+                class="sr-only"
+                {% if form.get('priority', 'medium') == p %}checked{% endif %}
+              >
+              <span class="priority-label-text">{{ p | capitalize }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="task-due-date" class="form-label">Due date</label>
+          <input
+            type="date"
+            id="task-due-date"
+            name="due_date"
+            class="form-input"
+            value="{{ form.get('due_date', '') }}"
+          >
+        </div>
+        <div class="form-group">
+          <label for="task-due-time" class="form-label">Due time</label>
+          <input
+            type="time"
+            id="task-due-time"
+            name="due_time"
+            class="form-input"
+            value="{{ form.get('due_time', '') }}"
+          >
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="task-description" class="form-label">Description</label>
+        <textarea
+          id="task-description"
+          name="description"
+          class="form-textarea"
+          rows="4"
+          placeholder="Any additional details..."
+        >{{ form.get('description', '') }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            name="pinned_to_today"
+            id="task-pinned"
+            class="checkbox-input"
+            {% if form.get('pinned_to_today') == 'on' %}checked{% endif %}
+          >
+          <span class="checkbox-custom" aria-hidden="true"></span>
+          <span class="checkbox-text">Pin to today</span>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Add Task</button>
+        <a href="/tasks" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}New Note — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <a href="/notes" class="back-link" aria-label="Back to notes">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M13 16L7 10l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Notes
+  </a>
+  <h1 class="page-title">New Note</h1>
+</div>
+
+{% if errors %}
+  <div class="alert alert-danger" role="alert">
+    <ul class="error-list">
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<div class="card form-card note-form-card">
+  <div class="card-body">
+    <form method="post" action="/notes/new" class="note-edit-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label for="note-title" class="form-label">
+          Title <span class="required-mark" aria-hidden="true">*</span>
+        </label>
+        <input
+          type="text"
+          id="note-title"
+          name="title"
+          class="form-input form-input-lg"
+          placeholder="Note title..."
+          value="{{ form.get('title', '') }}"
+          autofocus
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="form-group form-group-grow">
+        <label for="note-body" class="form-label">
+          Content
+          <span class="form-label-hint">Markdown supported</span>
+        </label>
+        <textarea
+          id="note-body"
+          name="body"
+          class="form-textarea note-body-textarea"
+          rows="16"
+          placeholder="Write your note here... Markdown is supported."
+        >{{ form.get('content', '') or form.get('body', '') }}</textarea>
+      </div>
+
+      <div class="form-row form-row-align-end">
+        <div class="form-group">
+          <label for="note-tag" class="form-label">Tag</label>
+          <input
+            type="text"
+            id="note-tag"
+            name="tag"
+            class="form-input"
+            placeholder="e.g. work, personal, idea"
+            value="{{ form.get('tags', '') or form.get('tag', '') }}"
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              name="pinned"
+              id="note-pinned"
+              class="checkbox-input"
+              {% if form.get('pinned') == 'on' %}checked{% endif %}
+            >
+            <span class="checkbox-custom" aria-hidden="true"></span>
+            <span class="checkbox-text">Pin this note</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Note</button>
+        <a href="/notes" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}" id="csrf-global">
+{% endblock %}

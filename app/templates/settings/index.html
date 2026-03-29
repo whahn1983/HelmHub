@@ -10,7 +10,7 @@
 </div>
 
 <form
-  hx-post="/settings"
+  hx-post="/settings/"
   hx-swap="none"
   hx-on::after-request="onSettingsSaved(event)"
   class="settings-form"
@@ -43,7 +43,6 @@
               class="radio-input"
               {% if user_settings and user_settings.theme == 'light' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
@@ -60,7 +59,6 @@
               class="radio-input"
               {% if user_settings and user_settings.theme == 'dark' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <path d="M17 12.2A8 8 0 017.8 3 8 8 0 1017 12.2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -76,7 +74,6 @@
               class="radio-input"
               {% if not user_settings or user_settings.theme == 'system' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <rect x="2" y="3" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
@@ -100,7 +97,6 @@
               class="radio-input"
               {% if user_settings and user_settings.time_format == '12' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">12-hour <span class="radio-example">(3:00 PM)</span></span>
           </label>
           <label class="radio-option">
@@ -111,7 +107,6 @@
               class="radio-input"
               {% if not user_settings or user_settings.time_format == '24' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">24-hour <span class="radio-example">(15:00)</span></span>
           </label>
         </div>
@@ -151,7 +146,6 @@
               class="checkbox-input"
               {% if not user_settings or getattr(user_settings, name, True) %}checked{% endif %}
             >
-            <span class="checkbox-custom" aria-hidden="true"></span>
             <span class="checkbox-content">
               <span class="checkbox-label-text">{{ label }}</span>
               <span class="checkbox-description">{{ description }}</span>
@@ -192,7 +186,6 @@
               class="radio-input"
               {% if user_settings and user_settings.default_page == value %}checked{% elif not user_settings and value == '/' %}checked{% endif %}
             >
-            <span class="radio-custom" aria-hidden="true"></span>
             <span class="radio-content">
               <span class="radio-label-text">{{ label }}</span>
               <span class="radio-description">{{ desc }}</span>

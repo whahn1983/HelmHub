@@ -146,7 +146,7 @@ def index():
 
     if _is_htmx():
         return render_template(
-            'partials/tasks_list.html',
+            'tasks/tasks_list.html',
             tasks=tasks,
             view=view,
             priority_filter=priority_filter,
@@ -177,7 +177,7 @@ def new():
             for msg in errors:
                 flash(msg, 'danger')
             if _is_htmx():
-                return render_template('partials/task_form.html', errors=errors, form=request.form), 422
+                return render_template('tasks/task_form.html', errors=errors, form=request.form), 422
             return render_template('tasks/new.html', errors=errors, form=request.form), 422
 
         task = Task(
@@ -195,7 +195,7 @@ def new():
         flash('Task created successfully.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/task_item.html', task=task))
+            response = make_response(render_template('tasks/task_item.html', task=task))
             response.headers['HX-Trigger'] = 'taskCreated'
             return response
 
@@ -203,7 +203,7 @@ def new():
 
     # GET
     if _is_htmx():
-        return render_template('partials/task_form.html', form={})
+        return render_template('tasks/task_form.html', form={})
 
     return render_template('tasks/new.html', form={})
 
@@ -225,7 +225,7 @@ def edit(task_id):
             for msg in errors:
                 flash(msg, 'danger')
             if _is_htmx():
-                return render_template('partials/task_form.html', task=task, errors=errors, form=request.form), 422
+                return render_template('tasks/task_form.html', task=task, errors=errors, form=request.form), 422
             return render_template('tasks/edit.html', task=task, errors=errors, form=request.form), 422
 
         task.title = data['title']
@@ -238,7 +238,7 @@ def edit(task_id):
         flash('Task updated.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/task_item.html', task=task))
+            response = make_response(render_template('tasks/task_item.html', task=task))
             response.headers['HX-Trigger'] = 'taskUpdated'
             return response
 
@@ -246,7 +246,7 @@ def edit(task_id):
 
     # GET
     if _is_htmx():
-        return render_template('partials/task_form.html', task=task, form=task)
+        return render_template('tasks/task_form.html', task=task, form=task)
 
     return render_template('tasks/edit.html', task=task, form=task)
 
@@ -264,7 +264,7 @@ def complete(task_id):
     db.session.commit()
 
     if _is_htmx():
-        response = make_response(render_template('partials/task_item.html', task=task))
+        response = make_response(render_template('tasks/task_item.html', task=task))
         response.headers['HX-Trigger'] = 'taskStatusChanged'
         return response
 
@@ -306,7 +306,7 @@ def pin(task_id):
     db.session.commit()
 
     if _is_htmx():
-        response = make_response(render_template('partials/task_item.html', task=task))
+        response = make_response(render_template('tasks/task_item.html', task=task))
         response.headers['HX-Trigger'] = 'taskPinChanged'
         return response
 

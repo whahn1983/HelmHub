@@ -1,0 +1,14 @@
+{% if reminders %}
+  {% for reminder in reminders %}
+    {% include "reminders/reminder_item.html" %}
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p class="empty-state-title">
+      {% if status_filter == 'completed' %}No completed reminders
+      {% elif status_filter == 'dismissed' %}No dismissed reminders
+      {% elif status_filter == 'snoozed' %}No snoozed reminders
+      {% else %}No reminders{% endif %}
+    </p>
+  </div>
+{% endif %}

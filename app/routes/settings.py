@@ -82,7 +82,7 @@ def index():
         flash('Settings saved.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/settings_saved.html'))
+            response = make_response(render_template('settings/settings_saved.html'))
             response.headers['HX-Trigger'] = 'settingsSaved'
             return response
 

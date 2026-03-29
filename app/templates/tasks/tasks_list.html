@@ -1,0 +1,15 @@
+{% if tasks %}
+  {% for task in tasks %}
+    {% include "tasks/task_item.html" %}
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p class="empty-state-title">
+      {% if view == 'completed' %}No completed tasks yet
+      {% elif view == 'overdue' %}No overdue tasks — great job!
+      {% elif view == 'today' %}Nothing due today
+      {% elif view == 'upcoming' %}No upcoming tasks
+      {% else %}No tasks yet{% endif %}
+    </p>
+  </div>
+{% endif %}

@@ -9,7 +9,7 @@ Base prefix: /api  (registered by the app factory)
 
 from datetime import datetime, date, timedelta
 
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, jsonify, request, abort, make_response
 from flask_login import login_required, current_user
 
 from app.extensions import db, csrf
@@ -190,30 +190,59 @@ def reminders_due():
 @login_required
 def quick_capture():
     """
-    Quick-capture endpoint: create a task, note, reminder, or event from
-    a single JSON payload.
+    Quick-capture endpoint: create a task, note, reminder, or event.
 
-    Expected JSON body:
-      {
-        "type": "task" | "note" | "reminder" | "event",
-        ... type-specific fields ...
-      }
+    Accepts JSON or form-encoded data (e.g. from HTMX forms).
+    Returns JSON for JSON requests; HTML fragment for HTMX form requests.
 
-    Task fields:   title (required), description, priority, due_date, due_time, pinned_to_today
-    Note fields:   title (required), body, tag, pinned
-    Reminder fields: title (required), notes, remind_date (required), remind_time
-    Event fields:  title (required), start_date (required), start_time,
-                   end_date, end_time, location, notes
+    Task fields:   type=task, title (required), priority, due_date
+    Note fields:   type=note, title (optional), body, tag
+    Reminder fields: type=reminder, title (required), remind_at (datetime-local)
+    Event fields:  type=event, title (required), start_at (datetime-local),
+                   end_at (datetime-local, optional), location
     """
-    payload = request.get_json(silent=True)
-    if not payload:
-        return jsonify({'error': 'Invalid or missing JSON body.'}), 400
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+    else:
+        payload = request.form
+
+    is_htmx = request.headers.get('HX-Request') == 'true'
+
+    def _ok_html(msg):
+        resp = make_response(
+            f'<p class="qc-success">'
+            f'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">'
+            f'<path d="M2.5 7l3.5 3.5 5.5-7" stroke="currentColor" stroke-width="1.75"'
+            f' stroke-linecap="round" stroke-linejoin="round"/></svg> {msg}</p>'
+        )
+        resp.headers['HX-Trigger'] = 'quickCaptureSuccess'
+        return resp, 201
+
+    def _err_html(msg):
+        return (
+            f'<p class="qc-error">{msg}</p>',
+            422,
+        )
+
+    def _parse_dt_local(value):
+        """Parse a datetime-local string (YYYY-MM-DDTHH:MM) to datetime."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            return None
 
     capture_type = payload.get('type', '').strip().lower()
 
+    # ------------------------------------------------------------------
+    # Task
+    # ------------------------------------------------------------------
     if capture_type == 'task':
         title = payload.get('title', '').strip()
         if not title:
+            if is_htmx:
+                return _err_html('Task title is required.')
             return jsonify({'error': 'title is required for tasks.'}), 422
 
         priority = payload.get('priority', 'medium').strip().lower()
@@ -222,9 +251,8 @@ def quick_capture():
 
         due_at = None
         due_date_str = payload.get('due_date', '')
-        due_time_str = payload.get('due_time', None)
         if due_date_str:
-            due_at = parse_datetime(due_date_str, due_time_str)
+            due_at = parse_datetime(due_date_str, None)
 
         task = Task(
             user_id=current_user.id,
@@ -237,38 +265,64 @@ def quick_capture():
         )
         db.session.add(task)
         db.session.commit()
+
+        if is_htmx:
+            return _ok_html(f'Task \u201c{title}\u201d added!')
         return jsonify({'status': 'created', 'type': 'task', 'item': _json_task(task)}), 201
 
+    # ------------------------------------------------------------------
+    # Note
+    # ------------------------------------------------------------------
     elif capture_type == 'note':
         title = payload.get('title', '').strip()
+        body = payload.get('body', '').strip()
+
+        if not title and not body:
+            if is_htmx:
+                return _err_html('Note title or content is required.')
+            return jsonify({'error': 'title or body is required for notes.'}), 422
+
         if not title:
-            return jsonify({'error': 'title is required for notes.'}), 422
+            # Auto-title from first line of body
+            title = body.split('\n')[0][:60] or 'Quick Note'
 
         tag = payload.get('tag', '').strip().lower() or None
         note = Note(
             user_id=current_user.id,
             title=title,
-            body=payload.get('body', '').strip() or None,
+            body=body or None,
             tag=tag,
             pinned=bool(payload.get('pinned', False)),
         )
         db.session.add(note)
         db.session.commit()
+
+        if is_htmx:
+            return _ok_html('Note saved!')
         return jsonify({'status': 'created', 'type': 'note', 'item': _json_note(note)}), 201
 
+    # ------------------------------------------------------------------
+    # Reminder
+    # ------------------------------------------------------------------
     elif capture_type == 'reminder':
         title = payload.get('title', '').strip()
         if not title:
+            if is_htmx:
+                return _err_html('Reminder title is required.')
             return jsonify({'error': 'title is required for reminders.'}), 422
 
-        remind_date_str = payload.get('remind_date', '')
-        remind_time_str = payload.get('remind_time', None)
-        if not remind_date_str:
-            return jsonify({'error': 'remind_date is required for reminders.'}), 422
-
-        remind_at = parse_datetime(remind_date_str, remind_time_str)
+        # Accept datetime-local (remind_at) or separate remind_date + remind_time
+        remind_at = _parse_dt_local(payload.get('remind_at', ''))
         if remind_at is None:
-            return jsonify({'error': 'Invalid date/time format for remind_date.'}), 422
+            remind_at = parse_datetime(
+                payload.get('remind_date', ''),
+                payload.get('remind_time') or None,
+            )
+
+        if remind_at is None:
+            if is_htmx:
+                return _err_html('Reminder date/time is required.')
+            return jsonify({'error': 'remind_at is required for reminders.'}), 422
 
         reminder = Reminder(
             user_id=current_user.id,
@@ -279,29 +333,40 @@ def quick_capture():
         )
         db.session.add(reminder)
         db.session.commit()
+
+        if is_htmx:
+            return _ok_html('Reminder set!')
         return jsonify({'status': 'created', 'type': 'reminder', 'item': _json_reminder(reminder)}), 201
 
+    # ------------------------------------------------------------------
+    # Event
+    # ------------------------------------------------------------------
     elif capture_type == 'event':
         title = payload.get('title', '').strip()
         if not title:
+            if is_htmx:
+                return _err_html('Event title is required.')
             return jsonify({'error': 'title is required for events.'}), 422
 
-        start_date_str = payload.get('start_date', '')
-        start_time_str = payload.get('start_time', None)
-        if not start_date_str:
-            return jsonify({'error': 'start_date is required for events.'}), 422
-
-        start_at = parse_datetime(start_date_str, start_time_str)
+        # Accept datetime-local (start_at) or separate start_date + start_time
+        start_at = _parse_dt_local(payload.get('start_at', ''))
         if start_at is None:
-            return jsonify({'error': 'Invalid date/time format for start_date.'}), 422
+            start_at = parse_datetime(
+                payload.get('start_date', ''),
+                payload.get('start_time') or None,
+            )
 
-        end_at = None
-        end_date_str = payload.get('end_date', '')
-        end_time_str = payload.get('end_time', None)
-        if end_date_str:
-            end_at = parse_datetime(end_date_str, end_time_str)
-            if end_at is None:
-                return jsonify({'error': 'Invalid date/time format for end_date.'}), 422
+        if start_at is None:
+            if is_htmx:
+                return _err_html('Event start date/time is required.')
+            return jsonify({'error': 'start_at is required for events.'}), 422
+
+        end_at = _parse_dt_local(payload.get('end_at', ''))
+        if end_at is None:
+            end_at = parse_datetime(
+                payload.get('end_date', ''),
+                payload.get('end_time') or None,
+            )
 
         event = Event(
             user_id=current_user.id,
@@ -313,12 +378,16 @@ def quick_capture():
         )
         db.session.add(event)
         db.session.commit()
+
+        if is_htmx:
+            return _ok_html(f'Event \u201c{title}\u201d added!')
         return jsonify({'status': 'created', 'type': 'event', 'item': _json_event(event)}), 201
 
     else:
-        return jsonify({
-            'error': f'Unknown type {capture_type!r}. Must be one of: task, note, reminder, event.'
-        }), 422
+        msg = f'Unknown type {capture_type!r}. Must be one of: task, note, reminder, event.'
+        if is_htmx:
+            return _err_html(msg)
+        return jsonify({'error': msg}), 422
 
 
 # ---------------------------------------------------------------------------

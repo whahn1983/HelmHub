@@ -1,0 +1,16 @@
+{% if notes %}
+  {% for note in notes %}
+    {% include "notes/note_item.html" %}
+  {% endfor %}
+{% else %}
+  <div class="empty-state">
+    <p class="empty-state-title">
+      {% if pinned_only %}No pinned notes
+      {% elif search %}No notes match your search
+      {% else %}No notes yet{% endif %}
+    </p>
+    {% if not pinned_only and not search %}
+      <a href="/notes/new" class="btn btn-primary">Write a note</a>
+    {% endif %}
+  </div>
+{% endif %}

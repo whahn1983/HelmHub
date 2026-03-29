@@ -74,7 +74,7 @@ def index():
 
     if _is_htmx():
         return render_template(
-            'partials/notes_list.html',
+            'notes/notes_list.html',
             notes=notes,
             tag=tag,
             search=search,
@@ -113,7 +113,7 @@ def new():
                 flash(msg, 'danger')
             if _is_htmx():
                 return render_template(
-                    'partials/note_form.html',
+                    'notes/note_form.html',
                     errors=errors,
                     form=request.form,
                 ), 422
@@ -132,7 +132,7 @@ def new():
         flash('Note created.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/note_item.html', note=note))
+            response = make_response(render_template('notes/note_item.html', note=note))
             response.headers['HX-Trigger'] = 'noteCreated'
             return response
 
@@ -140,7 +140,7 @@ def new():
 
     # GET
     if _is_htmx():
-        return render_template('partials/note_form.html', form={})
+        return render_template('notes/note_form.html', form={})
 
     return render_template('notes/new.html', form={})
 
@@ -170,7 +170,7 @@ def edit(note_id):
                 flash(msg, 'danger')
             if _is_htmx():
                 return render_template(
-                    'partials/note_form.html',
+                    'notes/note_form.html',
                     note=note,
                     errors=errors,
                     form=request.form,
@@ -186,7 +186,7 @@ def edit(note_id):
         flash('Note updated.', 'success')
 
         if _is_htmx():
-            response = make_response(render_template('partials/note_item.html', note=note))
+            response = make_response(render_template('notes/note_item.html', note=note))
             response.headers['HX-Trigger'] = 'noteUpdated'
             return response
 
@@ -194,7 +194,7 @@ def edit(note_id):
 
     # GET
     if _is_htmx():
-        return render_template('partials/note_form.html', note=note, form=note)
+        return render_template('notes/note_form.html', note=note, form=note)
 
     return render_template('notes/edit.html', note=note, form=note)
 
@@ -234,7 +234,7 @@ def pin(note_id):
     db.session.commit()
 
     if _is_htmx():
-        response = make_response(render_template('partials/note_item.html', note=note))
+        response = make_response(render_template('notes/note_item.html', note=note))
         response.headers['HX-Trigger'] = 'notePinChanged'
         return response
 
@@ -271,7 +271,7 @@ def scratchpad():
         db.session.commit()
 
     if _is_htmx():
-        return render_template('partials/scratchpad.html', note=note)
+        return render_template('notes/scratchpad_partial.html', note=note)
 
     return render_template('notes/scratchpad.html', note=note)
 
@@ -299,7 +299,7 @@ def save_scratchpad():
     db.session.commit()
 
     if _is_htmx():
-        response = make_response(render_template('partials/scratchpad_saved.html', note=note))
+        response = make_response(render_template('notes/scratchpad_saved.html', note=note))
         response.headers['HX-Trigger'] = 'scratchpadSaved'
         return response
 

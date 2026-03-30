@@ -389,34 +389,40 @@
       </h2>
       <a href="/bookmarks" class="card-action-link">All bookmarks</a>
     </div>
-    <div class="card-body">
+    <div class="card-body bookmarks-widget-body">
       {% if dashboard_bookmarks %}
-        <ul class="bookmarks-preview-list" role="list">
-          {% for bookmark in dashboard_bookmarks[:6] %}
-            <li class="bookmark-preview-item {% if bookmark.pinned %}bookmark-preview-pinned{% endif %}">
-              <a href="{{ bookmark.url }}" target="_blank" rel="noopener noreferrer" class="bookmark-preview-link" title="{{ bookmark.url }}">
-                <span class="bookmark-preview-icon" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                    <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M6.5 1.5C5.2 3 4.5 4.7 4.5 6.5s.7 3.5 2 5M6.5 1.5C7.8 3 8.5 4.7 8.5 6.5s-.7 3.5-2 5M1.5 6.5h10" stroke="currentColor" stroke-width="1.2"/>
-                  </svg>
-                </span>
-                <span class="bookmark-preview-title">{{ bookmark.title }}</span>
-                {% if bookmark.pinned %}
-                  <svg class="bookmark-pin-icon" width="10" height="10" viewBox="0 0 14 14" fill="currentColor" aria-label="Pinned" title="Pinned">
-                    <path d="M10.5 1.5L9.5 5 11 6.5l-2.5 2.5L7 7.5l-3.5 3.5L3 11.5l-1-1 .5-.5L6 6.5 4.5 5l2.5-2 1.5 1L10.5 1.5z"/>
-                  </svg>
-                {% endif %}
-                <svg class="bookmark-ext-icon" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V7M7 1h4v4M11 1L5.5 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </a>
-              {% if bookmark.category %}
-                <span class="tag-badge tag-badge-xs">{{ bookmark.category }}</span>
-              {% endif %}
-            </li>
+        <div class="bookmarks-widget-scroll">
+          {% for cat_label, cat_bookmarks in dashboard_bookmarks_grouped %}
+            <div class="bookmark-widget-category-group">
+              <div class="bookmark-widget-category-heading">
+                {% if cat_label %}{{ cat_label | title }}{% else %}Uncategorized{% endif %}
+              </div>
+              <ul class="bookmarks-preview-list" role="list">
+                {% for bookmark in cat_bookmarks %}
+                  <li class="bookmark-preview-item {% if bookmark.pinned %}bookmark-preview-pinned{% endif %}">
+                    <a href="{{ bookmark.url }}" target="_blank" rel="noopener noreferrer" class="bookmark-preview-link" title="{{ bookmark.url }}">
+                      <span class="bookmark-preview-icon" aria-hidden="true">
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                          <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/>
+                          <path d="M6.5 1.5C5.2 3 4.5 4.7 4.5 6.5s.7 3.5 2 5M6.5 1.5C7.8 3 8.5 4.7 8.5 6.5s-.7 3.5-2 5M1.5 6.5h10" stroke="currentColor" stroke-width="1.2"/>
+                        </svg>
+                      </span>
+                      <span class="bookmark-preview-title">{{ bookmark.title }}</span>
+                      {% if bookmark.pinned %}
+                        <svg class="bookmark-pin-icon" width="10" height="10" viewBox="0 0 14 14" fill="currentColor" aria-label="Pinned" title="Pinned">
+                          <path d="M10.5 1.5L9.5 5 11 6.5l-2.5 2.5L7 7.5l-3.5 3.5L3 11.5l-1-1 .5-.5L6 6.5 4.5 5l2.5-2 1.5 1L10.5 1.5z"/>
+                        </svg>
+                      {% endif %}
+                      <svg class="bookmark-ext-icon" width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V7M7 1h4v4M11 1L5.5 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </a>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
           {% endfor %}
-        </ul>
+        </div>
       {% else %}
         <div class="empty-state empty-state-sm">
           <p>No bookmarks yet.</p>

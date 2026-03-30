@@ -1403,6 +1403,71 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
   padding: .1rem .4rem;
 }
 
+/* --- Category grouping (bookmarks page) --- */
+.bookmark-category-group {
+  margin-bottom: 1.75rem;
+}
+
+.bookmark-category-group:last-child {
+  margin-bottom: 0;
+}
+
+.bookmark-group-heading {
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin: 0 0 .65rem 0;
+  padding-bottom: .4rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* --- Dashboard bookmarks widget (scrollable + grouped) --- */
+.bookmarks-widget-body {
+  padding-bottom: 0 !important;
+}
+
+.bookmarks-widget-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-bottom: .75rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.bookmarks-widget-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.bookmarks-widget-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bookmarks-widget-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.bookmark-widget-category-group {
+  margin-bottom: 1rem;
+}
+
+.bookmark-widget-category-group:last-child {
+  margin-bottom: 0;
+}
+
+.bookmark-widget-category-heading {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  padding: .2rem .4rem .35rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: .25rem;
+}
+
 /* --- Responsive --- */
 @media (min-width: 560px) {
   .bookmarks-grid {

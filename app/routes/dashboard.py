@@ -131,21 +131,23 @@ def index():
 
     # --- Bookmarks ---
 
-    # Show pinned bookmarks first, then most-recently added, up to 6 on dash.
-    pinned_bookmarks = (
+    # Show all bookmarks on the dashboard widget (scrollable), pinned first.
+    dashboard_bookmarks = (
         Bookmark.query
-        .filter_by(user_id=current_user.id, pinned=True)
-        .order_by(Bookmark.created_at.desc())
+        .filter_by(user_id=current_user.id)
+        .order_by(Bookmark.pinned.desc(), Bookmark.created_at.desc())
         .all()
     )
-    recent_bookmarks = (
-        Bookmark.query
-        .filter_by(user_id=current_user.id, pinned=False)
-        .order_by(Bookmark.created_at.desc())
-        .limit(max(0, 6 - len(pinned_bookmarks)))
-        .all()
-    )
-    dashboard_bookmarks = pinned_bookmarks + recent_bookmarks
+
+    # Group for category-grouped widget display
+    _bm_groups: dict = {}
+    for bm in dashboard_bookmarks:
+        key = bm.category or ''
+        _bm_groups.setdefault(key, []).append(bm)
+    _named = sorted([(k, v) for k, v in _bm_groups.items() if k], key=lambda x: x[0])
+    if '' in _bm_groups:
+        _named.append(('', _bm_groups['']))
+    dashboard_bookmarks_grouped = _named
 
     hour = now.hour
     if hour < 12:
@@ -167,6 +169,7 @@ def index():
         next_event=next_event,
         recent_notes=recent_notes,
         dashboard_bookmarks=dashboard_bookmarks,
+        dashboard_bookmarks_grouped=dashboard_bookmarks_grouped,
         user_settings=user_settings,
         widget_visibility=widget_visibility,
         now=now,

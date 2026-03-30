@@ -186,6 +186,20 @@ def index():
     )
     all_categories = [row[0] for row in all_categories if row[0]]
 
+    # Build grouped view when no filters are active
+    show_grouped = not (category or search or pinned_only)
+    grouped_bookmarks = None
+    if show_grouped and bookmarks:
+        cat_groups: dict = {}
+        for bm in bookmarks:
+            key = bm.category or ''
+            cat_groups.setdefault(key, []).append(bm)
+        # Named categories alphabetically, uncategorized at end
+        named = sorted([(k, v) for k, v in cat_groups.items() if k], key=lambda x: x[0])
+        if '' in cat_groups:
+            named.append(('', cat_groups['']))
+        grouped_bookmarks = named
+
     return render_template(
         'bookmarks/index.html',
         bookmarks=bookmarks,
@@ -193,6 +207,8 @@ def index():
         search=search,
         pinned_only=pinned_only,
         all_categories=all_categories,
+        show_grouped=show_grouped,
+        grouped_bookmarks=grouped_bookmarks,
     )
 
 

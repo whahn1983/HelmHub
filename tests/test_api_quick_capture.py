@@ -123,3 +123,37 @@ def test_quick_capture_note_and_bookmark_support_pinned_and_description(auth_cli
     assert bookmark.pinned is True
     assert bookmark.description == 'useful link'
     assert bookmark.category == 'tools'
+
+
+def test_quick_capture_form_post_prefers_safe_next_redirect(auth_client):
+    """Non-HTMX form submissions honor a safe local next path from the form payload."""
+    response = auth_client.post(
+        '/api/quick-capture',
+        data={
+            'type': 'task',
+            'title': 'Quick task with next redirect',
+            'next': '/bookmarks',
+        },
+        headers={'Referer': '/tasks'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers['Location'].endswith('/bookmarks')
+
+
+def test_quick_capture_form_post_rejects_external_next_redirect(auth_client):
+    """External next targets are ignored to avoid open-redirect behavior."""
+    response = auth_client.post(
+        '/api/quick-capture',
+        data={
+            'type': 'task',
+            'title': 'Quick task with bad next redirect',
+            'next': 'https://evil.example/phish',
+        },
+        headers={'Referer': '/tasks'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers['Location'].endswith('/tasks')

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}Quick Capture · HelmHub{% endblock %}
+
+{% block fab %}{% endblock %}
+{% block quick_capture_modal %}{% endblock %}
+
+{% block content %}
+<div class="page-container quick-capture-page">
+  <div class="modal" id="quick-capture-modal">
+    {% include 'partials/quick_capture_content.html' %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.addEventListener('DOMContentLoaded', function() {
+    var type = '{{ capture_type }}';
+    if (type) {
+      switchTab(type);
+    }
+    var firstInput = document.querySelector('.tab-panel.active input:not([type="hidden"]), .tab-panel.active textarea');
+    if (firstInput) firstInput.focus();
+  });
+
+  document.addEventListener('quickCaptureSuccess', function() {
+    setTimeout(function() {
+      window.location.href = '{{ close_href }}';
+    }, 700);
+  });
+</script>
+{% endblock %}

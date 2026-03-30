@@ -252,193 +252,9 @@
   {% block quick_capture_modal %}
   <div class="modal-overlay" id="quick-capture-overlay" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title" hidden>
     <div class="modal" id="quick-capture-modal">
-      <div class="modal-header">
-        <h2 class="modal-title" id="quick-capture-title">Quick Capture</h2>
-        <button class="modal-close btn-icon" onclick="closeQuickCapture()" aria-label="Close modal">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Tab Navigation -->
-      <div class="modal-tabs" role="tablist" aria-label="Capture type">
-        <button class="modal-tab active" role="tab" aria-selected="true" aria-controls="tab-task" id="tab-btn-task" onclick="switchTab('task')">Task</button>
-        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-note" id="tab-btn-note" onclick="switchTab('note')">Note</button>
-        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-reminder" id="tab-btn-reminder" onclick="switchTab('reminder')">Reminder</button>
-        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-event" id="tab-btn-event" onclick="switchTab('event')">Event</button>
-        <button class="modal-tab" role="tab" aria-selected="false" aria-controls="tab-bookmark" id="tab-btn-bookmark" onclick="switchTab('bookmark')">Bookmark</button>
-      </div>
-
-      <div class="modal-body">
-
-        <!-- Task Tab -->
-        <div class="tab-panel active" id="tab-task" role="tabpanel" aria-labelledby="tab-btn-task">
-          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="type" value="task">
-            <div class="form-group">
-              <label for="qc-task-title" class="form-label">Task title</label>
-              <input type="text" id="qc-task-title" name="title" class="form-input" placeholder="What needs to be done?" required autocomplete="off">
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="qc-task-priority" class="form-label">Priority</label>
-                <select id="qc-task-priority" name="priority" class="form-select">
-                  <option value="low">Low</option>
-                  <option value="medium" selected>Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="qc-task-due" class="form-label">Due date</label>
-                <input type="date" id="qc-task-due" name="due_date" class="form-input">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="qc-task-due-time" class="form-label">Due time (optional)</label>
-                <input type="time" id="qc-task-due-time" name="due_time" class="form-input">
-              </div>
-              <div class="form-group">
-                <label class="checkbox-label">
-                  <input type="checkbox" name="pinned_to_today" id="qc-task-pinned" class="checkbox-input">
-                  <span class="checkbox-text">Pin to today</span>
-                </label>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="qc-task-description" class="form-label">Description (optional)</label>
-              <textarea id="qc-task-description" name="description" class="form-textarea" rows="3" placeholder="Any additional details..."></textarea>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Add Task</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Note Tab -->
-        <div class="tab-panel" id="tab-note" role="tabpanel" aria-labelledby="tab-btn-note" hidden>
-          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="type" value="note">
-            <div class="form-group">
-              <label for="qc-note-title" class="form-label">Title (optional)</label>
-              <input type="text" id="qc-note-title" name="title" class="form-input" placeholder="Note title..." autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-note-body" class="form-label">Content</label>
-              <textarea id="qc-note-body" name="body" class="form-textarea" rows="4" placeholder="Write your note..." required></textarea>
-            </div>
-            <div class="form-group">
-              <label for="qc-note-tag" class="form-label">Tag (optional)</label>
-              <input type="text" id="qc-note-tag" name="tag" class="form-input" placeholder="e.g. work, personal..." autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" name="pinned" id="qc-note-pinned" class="checkbox-input">
-                <span class="checkbox-text">Pin this note</span>
-              </label>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Save Note</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Reminder Tab -->
-        <div class="tab-panel" id="tab-reminder" role="tabpanel" aria-labelledby="tab-btn-reminder" hidden>
-          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="type" value="reminder">
-            <div class="form-group">
-              <label for="qc-reminder-title" class="form-label">Reminder</label>
-              <input type="text" id="qc-reminder-title" name="title" class="form-input" placeholder="Remind me to..." required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-reminder-at" class="form-label">When</label>
-              <input type="datetime-local" id="qc-reminder-at" name="remind_at" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label for="qc-reminder-notes" class="form-label">Notes (optional)</label>
-              <textarea id="qc-reminder-notes" name="notes" class="form-textarea" rows="3" placeholder="Additional details..."></textarea>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Set Reminder</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Event Tab -->
-        <div class="tab-panel" id="tab-event" role="tabpanel" aria-labelledby="tab-btn-event" hidden>
-          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="type" value="event">
-            <div class="form-group">
-              <label for="qc-event-title" class="form-label">Event title</label>
-              <input type="text" id="qc-event-title" name="title" class="form-input" placeholder="Event name..." required autocomplete="off">
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="qc-event-start" class="form-label">Start</label>
-                <input type="datetime-local" id="qc-event-start" name="start_at" class="form-input" required>
-              </div>
-              <div class="form-group">
-                <label for="qc-event-end" class="form-label">End</label>
-                <input type="datetime-local" id="qc-event-end" name="end_at" class="form-input">
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="qc-event-location" class="form-label">Location (optional)</label>
-              <input type="text" id="qc-event-location" name="location" class="form-input" placeholder="Where?" autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-event-notes" class="form-label">Notes (optional)</label>
-              <textarea id="qc-event-notes" name="notes" class="form-textarea" rows="3" placeholder="Agenda, links, or details..."></textarea>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Add Event</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Bookmark Tab -->
-        <div class="tab-panel" id="tab-bookmark" role="tabpanel" aria-labelledby="tab-btn-bookmark" hidden>
-          <form method="post" action="/api/quick-capture" target="_self" hx-post="/api/quick-capture" hx-target="#quick-capture-result" hx-swap="innerHTML" class="quick-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="type" value="bookmark">
-            <div class="form-group">
-              <label for="qc-bookmark-title" class="form-label">Title</label>
-              <input type="text" id="qc-bookmark-title" name="title" class="form-input" placeholder="Bookmark title..." required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-bookmark-url" class="form-label">URL</label>
-              <input type="url" id="qc-bookmark-url" name="url" class="form-input" placeholder="https://example.com" required autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-bookmark-category" class="form-label">Category (optional)</label>
-              <input type="text" id="qc-bookmark-category" name="category" class="form-input" placeholder="e.g. docs, tools..." autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="qc-bookmark-description" class="form-label">Description (optional)</label>
-              <textarea id="qc-bookmark-description" name="description" class="form-textarea" rows="3" placeholder="Add a short note about this link..."></textarea>
-            </div>
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" name="pinned" id="qc-bookmark-pinned" class="checkbox-input">
-                <span class="checkbox-text">Pin to dashboard</span>
-              </label>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Save Bookmark</button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Result area -->
-        <div id="quick-capture-result" class="quick-capture-result" aria-live="polite"></div>
-
-      </div><!-- /.modal-body -->
+      {% set close_href = none %}
+      {% set next_url = none %}
+      {% include "partials/quick_capture_content.html" %}
     </div><!-- /.modal -->
   </div><!-- /.modal-overlay -->
   {% endblock quick_capture_modal %}
@@ -510,7 +326,15 @@
 
     // Quick capture modal
     function openQuickCapture(tab) {
+      var preferredTab = tab || 'task';
+      if (window.matchMedia && window.matchMedia('(max-width: 767px)').matches) {
+        var next = window.location.pathname + (window.location.search || '');
+        window.location.href = '/quick-capture?type=' + encodeURIComponent(preferredTab) + '&next=' + encodeURIComponent(next);
+        return;
+      }
+
       var overlay = document.getElementById('quick-capture-overlay');
+      if (!overlay) return;
       overlay.hidden = false;
       document.body.classList.add('modal-open');
       if (tab) switchTab(tab);
@@ -520,6 +344,7 @@
 
     function closeQuickCapture() {
       var overlay = document.getElementById('quick-capture-overlay');
+      if (!overlay) return;
       overlay.hidden = true;
       document.body.classList.remove('modal-open');
     }

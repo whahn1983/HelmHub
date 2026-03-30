@@ -27,6 +27,7 @@ services:
     environment:
       DATABASE_URL: postgresql://helmhub:${POSTGRES_PASSWORD:-helmhub_secret}@db:5432/helmhub
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-replace-with-fernet-key}
       FLASK_ENV: production
       TZ: ${TZ:-UTC}
       DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}

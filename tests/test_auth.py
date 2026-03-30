@@ -122,6 +122,16 @@ class TestLoginPost:
         location = response.headers.get('Location', '')
         assert '/tasks/' in location
 
+    def test_login_rejects_protocol_relative_next_redirect(self, client, test_user):
+        """Protocol-relative next values are rejected to prevent open redirects."""
+        response = client.post(
+            '/auth/login?next=//evil.example/phish',
+            data={'username': 'testuser', 'password': 'testpassword123'},
+            follow_redirects=False,
+        )
+        assert response.status_code in (301, 302)
+        assert response.headers.get('Location', '').endswith('/')
+
 
 # ---------------------------------------------------------------------------
 # GET /auth/logout

@@ -12,10 +12,12 @@ Usage
 
 import logging
 import os
+import secrets
 from datetime import datetime
 
 from flask import Flask, g, render_template, send_from_directory
 from flask_login import current_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import config
 from app.extensions import csrf, db, limiter, login_manager, migrate
@@ -55,6 +57,8 @@ def create_app(config_name: str | None = None) -> Flask:
 
     # Optional per-instance overrides (instance/config.py, git-ignored)
     app.config.from_pyfile('config.py', silent=True)
+    _validate_security_config(app)
+    _configure_proxy_fix(app)
 
     # ------------------------------------------------------------------
     # 2. Extensions
@@ -90,6 +94,7 @@ def create_app(config_name: str | None = None) -> Flask:
     # 6. Error handlers
     # ------------------------------------------------------------------
     _register_error_handlers(app)
+    _register_security_headers(app)
 
     # ------------------------------------------------------------------
     # 7. Template filters
@@ -154,6 +159,40 @@ def _init_extensions(app: Flask) -> None:
     login_manager.init_app(app)
     limiter.init_app(app)
     csrf.init_app(app)
+
+
+def _validate_security_config(app: Flask) -> None:
+    """Validate and backfill required security configuration."""
+    if not app.config.get('SECRET_KEY'):
+        app.config['SECRET_KEY'] = secrets.token_urlsafe(64)
+        logger.warning('SECRET_KEY missing; generated a random runtime key.')
+
+    if app.config.get('TESTING'):
+        app.config.setdefault('TOTP_ENCRYPTION_KEY', 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=')
+
+    if not app.config.get('TOTP_ENCRYPTION_KEY'):
+        raise RuntimeError(
+            'TOTP_ENCRYPTION_KEY is required to protect TOTP secrets at rest.'
+        )
+
+
+def _configure_proxy_fix(app: Flask) -> None:
+    """Apply ProxyFix when explicit trusted proxy hops are configured."""
+    x_for = int(app.config.get('PROXY_FIX_X_FOR', 0))
+    x_proto = int(app.config.get('PROXY_FIX_X_PROTO', 0))
+    x_host = int(app.config.get('PROXY_FIX_X_HOST', 0))
+    x_port = int(app.config.get('PROXY_FIX_X_PORT', 0))
+    x_prefix = int(app.config.get('PROXY_FIX_X_PREFIX', 0))
+
+    if any((x_for, x_proto, x_host, x_port, x_prefix)):
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=x_for,
+            x_proto=x_proto,
+            x_host=x_host,
+            x_port=x_port,
+            x_prefix=x_prefix,
+        )
 
 
 def _register_blueprints(app: Flask) -> None:
@@ -271,6 +310,32 @@ def _register_error_handlers(app: Flask) -> None:
         # Roll back any broken transaction so the session is usable again.
         db.session.rollback()
         return render_template('errors/500.html'), 500
+
+
+def _register_security_headers(app: Flask) -> None:
+    """Attach baseline hardening response headers."""
+
+    @app.after_request
+    def add_security_headers(response):  # noqa: WPS430
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
+            "frame-ancestors 'none'",
+        )
+        if request_is_secure():
+            response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        return response
+
+
+def request_is_secure() -> bool:
+    """Return True when the current request is HTTPS."""
+    from flask import request, has_request_context
+
+    return bool(has_request_context() and request.is_secure)
 
 
 def _create_default_admin(app: Flask) -> None:

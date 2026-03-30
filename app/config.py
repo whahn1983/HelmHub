@@ -7,6 +7,7 @@ All settings can be overridden via environment variables.
 """
 
 import os
+import secrets
 from datetime import timedelta
 
 
@@ -21,9 +22,8 @@ class BaseConfig:
     # ------------------------------------------------------------------
     # Security
     # ------------------------------------------------------------------
-    SECRET_KEY: str = os.environ.get(
-        'SECRET_KEY', 'dev-secret-key-CHANGE-ME-before-production'
-    )
+    SECRET_KEY: str = os.environ.get('SECRET_KEY') or secrets.token_urlsafe(64)
+    TOTP_ENCRYPTION_KEY: str | None = os.environ.get('TOTP_ENCRYPTION_KEY')
 
     # ------------------------------------------------------------------
     # Database
@@ -41,9 +41,9 @@ class BaseConfig:
     # ------------------------------------------------------------------
     # Session / Cookie security
     # ------------------------------------------------------------------
-    # Overridden to True in ProductionConfig; also respectable via env var
+    # Defaults to secure cookies; local development can override explicitly.
     SESSION_COOKIE_SECURE: bool = (
-        os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+        os.environ.get('SESSION_COOKIE_SECURE', 'True').lower() == 'true'
     )
     SESSION_COOKIE_HTTPONLY: bool = True
     SESSION_COOKIE_SAMESITE: str = 'Lax'
@@ -55,6 +55,15 @@ class BaseConfig:
     RATELIMIT_DEFAULT: str = '200 per day'
     RATELIMIT_STORAGE_URI: str = 'memory://'
     RATELIMIT_HEADERS_ENABLED: bool = True
+
+    # ------------------------------------------------------------------
+    # Reverse proxy / forwarded headers
+    # ------------------------------------------------------------------
+    PROXY_FIX_X_FOR: int = int(os.environ.get('PROXY_FIX_X_FOR', '0'))
+    PROXY_FIX_X_PROTO: int = int(os.environ.get('PROXY_FIX_X_PROTO', '0'))
+    PROXY_FIX_X_HOST: int = int(os.environ.get('PROXY_FIX_X_HOST', '0'))
+    PROXY_FIX_X_PORT: int = int(os.environ.get('PROXY_FIX_X_PORT', '0'))
+    PROXY_FIX_X_PREFIX: int = int(os.environ.get('PROXY_FIX_X_PREFIX', '0'))
 
     # ------------------------------------------------------------------
     # Application metadata
@@ -102,6 +111,7 @@ class TestingConfig(BaseConfig):
     SERVER_NAME: str = 'localhost'
     # Disable rate limiting during test runs
     RATELIMIT_ENABLED: bool = False
+    TOTP_ENCRYPTION_KEY: str = os.environ.get('TOTP_ENCRYPTION_KEY', 'Hv5bgL0x0dSWLwy5rMFHXqEMwFHMViLs8TVDosUAWn4=')
 
 
 # ---------------------------------------------------------------------------

@@ -12,17 +12,11 @@ from datetime import datetime, date, timedelta
 from flask import Blueprint, jsonify, request, abort, make_response, redirect, url_for, flash
 from flask_login import login_required, current_user
 
-from app.extensions import db, csrf
+from app.extensions import db
 from app.models import Task, Note, Reminder, Event, Bookmark
 from app.services.auth_service import parse_datetime
 
 api_bp = Blueprint('api', __name__)
-
-# Exempt the entire API blueprint from CSRF because API consumers typically
-# send JSON without the WTF CSRF cookie.  Callers should authenticate via
-# session/cookie as enforced by login_required.
-csrf.exempt(api_bp)
-
 
 # ---------------------------------------------------------------------------
 # Helpers

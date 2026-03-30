@@ -104,7 +104,7 @@
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save Bookmark</button>
-        <a href="/bookmarks" class="btn btn-ghost">Cancel</a>
+        <button type="button" class="btn btn-ghost" onclick="window.parent !== window ? window.parent.postMessage('helmhub:cancel-entity-modal', '*') : window.location.href='/bookmarks'">Cancel</button>
       </div>
     </form>
   </div>

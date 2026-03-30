@@ -128,7 +128,7 @@
         <button type="submit" class="btn btn-primary">
           {% if task %}Save Changes{% else %}Add Task{% endif %}
         </button>
-        <a href="/tasks" class="btn btn-ghost">Cancel</a>
+        <button type="button" class="btn btn-ghost" onclick="window.parent !== window ? window.parent.postMessage('helmhub:cancel-entity-modal', '*') : window.location.href='/tasks'">Cancel</button>
         {% if task %}
           <button
             type="button"

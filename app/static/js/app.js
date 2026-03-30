@@ -161,6 +161,8 @@
       window.addEventListener('message', (event) => {
         if (event.data === 'helmhub:close-entity-modal') {
           this.close(true);
+        } else if (event.data === 'helmhub:cancel-entity-modal') {
+          this.close(false);
         }
       });
     },

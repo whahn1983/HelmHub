@@ -4,14 +4,6 @@
 
 {% block content %}
 <div class="page-header dashboard-header">
-  <div class="quick-actions" aria-label="Quick actions">
-    <button class="btn btn-primary btn-sm" onclick="openQuickCapture('task')" aria-label="Add item">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      Add
-    </button>
-  </div>
   <div class="greeting-block">
     <h1 class="greeting" id="greeting-text">
       {{ greeting }}, {{ current_user.username }}

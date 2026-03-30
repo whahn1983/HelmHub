@@ -267,8 +267,9 @@ def quick_capture():
 
         due_at = None
         due_date_str = payload.get('due_date', '')
+        due_time_str = payload.get('due_time') or None
         if due_date_str:
-            due_at = parse_datetime(due_date_str, None)
+            due_at = parse_datetime(due_date_str, due_time_str)
 
         task = Task(
             user_id=current_user.id,

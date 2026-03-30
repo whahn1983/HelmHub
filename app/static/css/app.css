@@ -645,7 +645,7 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
 }
 
 #quick-capture-overlay {
-  align-items: var(--quick-capture-align, end);
+  align-items: var(--quick-capture-align, center);
   padding-top: var(--quick-capture-top-pad, .75rem);
 }
 

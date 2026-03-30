@@ -296,3 +296,111 @@ class TestTaskPin:
         auth_client.post(f'/tasks/{task.id}/pin')
         db.session.refresh(task)
         assert task.pinned_to_today is False
+
+
+# ---------------------------------------------------------------------------
+# Edit task
+# ---------------------------------------------------------------------------
+
+def _post_edit_task(client, task_id, **kwargs):
+    """POST to /tasks/<id>/edit with optional form field overrides."""
+    data = {
+        'title': kwargs.get('title', 'Updated Task'),
+        'priority': kwargs.get('priority', 'medium'),
+        'description': kwargs.get('description', ''),
+        'due_date': kwargs.get('due_date', ''),
+        'due_time': kwargs.get('due_time', ''),
+    }
+    if kwargs.get('pinned_to_today'):
+        data['pinned_to_today'] = 'on'
+    headers = kwargs.get('headers', {})
+    return client.post(f'/tasks/{task_id}/edit', data=data, headers=headers, follow_redirects=False)
+
+
+class TestTaskEdit:
+    def test_get_edit_task_page_returns_200(self, auth_client, db, test_user):
+        """GET /tasks/<id>/edit renders the edit form."""
+        task = _create_task(db, test_user, title='Editable task')
+        response = auth_client.get(f'/tasks/{task.id}/edit')
+        assert response.status_code == 200
+
+    def test_edit_updates_title(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit persists the new title."""
+        task = _create_task(db, test_user, title='Old title')
+        _post_edit_task(auth_client, task.id, title='New title')
+        db.session.refresh(task)
+        assert task.title == 'New title'
+
+    def test_edit_updates_priority(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit persists the new priority."""
+        task = _create_task(db, test_user, title='Priority task', priority='low')
+        _post_edit_task(auth_client, task.id, title='Priority task', priority='high')
+        db.session.refresh(task)
+        assert task.priority == 'high'
+
+    def test_edit_updates_description(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit persists the new description."""
+        task = _create_task(db, test_user, title='Desc task')
+        _post_edit_task(auth_client, task.id, title='Desc task', description='New description')
+        db.session.refresh(task)
+        assert task.description == 'New description'
+
+    def test_edit_updates_due_date(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit persists a new due date."""
+        task = _create_task(db, test_user, title='Due date task')
+        tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
+        _post_edit_task(auth_client, task.id, title='Due date task', due_date=tomorrow)
+        db.session.refresh(task)
+        assert task.due_at is not None
+
+    def test_edit_sets_pinned_to_today(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit with pinned_to_today sets the flag."""
+        task = _create_task(db, test_user, title='Pin today task', pinned_to_today=False)
+        _post_edit_task(auth_client, task.id, title='Pin today task', pinned_to_today=True)
+        db.session.refresh(task)
+        assert task.pinned_to_today is True
+
+    def test_edit_redirects_on_success(self, auth_client, db, test_user):
+        """Successful edit redirects to the task index."""
+        task = _create_task(db, test_user, title='Redirect task')
+        response = _post_edit_task(auth_client, task.id, title='Redirect task updated')
+        assert response.status_code in (301, 302)
+        assert '/tasks' in response.headers.get('Location', '')
+
+    def test_edit_missing_title_returns_422(self, auth_client, db, test_user):
+        """POST /tasks/<id>/edit without a title returns 422."""
+        task = _create_task(db, test_user, title='Title required task')
+        response = _post_edit_task(auth_client, task.id, title='')
+        assert response.status_code == 422
+
+    def test_edit_htmx_returns_trigger_header(self, auth_client, db, test_user):
+        """HTMX edit request returns HX-Trigger: taskUpdated."""
+        task = _create_task(db, test_user, title='HTMX edit task')
+        response = _post_edit_task(
+            auth_client, task.id,
+            title='HTMX edited',
+            headers={'HX-Request': 'true'},
+        )
+        assert response.headers.get('HX-Trigger') == 'taskUpdated'
+
+    def test_edit_nonexistent_task_returns_404(self, auth_client):
+        """Editing a task that does not exist returns 404."""
+        response = _post_edit_task(auth_client, 999999, title='Ghost task')
+        assert response.status_code == 404
+
+    def test_edit_another_users_task_returns_404(self, auth_client, db):
+        """Users cannot edit another user's task."""
+        from app.models import User
+        other = User(username='taskeditor')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        task = _create_task(db, other, title='Others edit task')
+        response = _post_edit_task(auth_client, task.id, title='Hijacked')
+        assert response.status_code == 404
+
+    def test_edit_requires_auth(self, client, db, test_user):
+        """Unauthenticated edit attempt redirects to login."""
+        task = _create_task(db, test_user, title='Auth edit task')
+        response = client.post(f'/tasks/{task.id}/edit', data={'title': 'x', 'priority': 'medium'}, follow_redirects=False)
+        assert response.status_code in (301, 302)

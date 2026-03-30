@@ -25,7 +25,16 @@
       } catch (_) {}
       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       const effective = theme === 'dark' || (theme === 'system' && prefersDark) ? 'dark' : 'light';
-      document.documentElement.style.backgroundColor = effective === 'dark' ? '#0f0f1a' : '#f8f9fa';
+      const bg = effective === 'dark' ? '#0f0f1a' : '#f8f9fa';
+      const root = document.documentElement;
+      root.style.backgroundColor = bg;
+      /* Set CSS vars early so body background is correct before stylesheet loads */
+      root.style.setProperty('--bg-primary', bg);
+      root.style.setProperty('--bg-secondary', effective === 'dark' ? '#1a1a2e' : '#ffffff');
+      root.style.setProperty('--bg-card', effective === 'dark' ? '#1e1e30' : '#ffffff');
+      root.style.setProperty('--text-primary', effective === 'dark' ? '#e8e8f0' : '#1a1a2e');
+      /* Disable transitions during initial paint to prevent white flash */
+      root.classList.add('no-transition');
     })();
   </script>
   <link rel="stylesheet" href="/static/css/app.css">

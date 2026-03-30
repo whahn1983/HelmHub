@@ -241,6 +241,118 @@ class TestNotePin:
 # Scratchpad
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Edit note
+# ---------------------------------------------------------------------------
+
+def _post_edit_note(client, note_id, **kwargs):
+    """POST to /notes/<id>/edit with optional form field overrides."""
+    data = {
+        'title': kwargs.get('title', 'Updated Note'),
+        'body': kwargs.get('body', ''),
+        'tag': kwargs.get('tag', ''),
+    }
+    if kwargs.get('pinned'):
+        data['pinned'] = 'on'
+    headers = kwargs.get('headers', {})
+    return client.post(f'/notes/{note_id}/edit', data=data, headers=headers, follow_redirects=False)
+
+
+class TestNoteEdit:
+    def test_get_edit_note_page_returns_200(self, auth_client, db, test_user):
+        """GET /notes/<id>/edit renders the edit form."""
+        note = _create_note(db, test_user, title='Editable note')
+        response = auth_client.get(f'/notes/{note.id}/edit')
+        assert response.status_code == 200
+
+    def test_edit_updates_title(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit persists the new title."""
+        note = _create_note(db, test_user, title='Old title')
+        _post_edit_note(auth_client, note.id, title='New title')
+        db.session.refresh(note)
+        assert note.title == 'New title'
+
+    def test_edit_updates_body(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit persists the new body content."""
+        note = _create_note(db, test_user, title='Body note')
+        _post_edit_note(auth_client, note.id, title='Body note', body='Updated body text')
+        db.session.refresh(note)
+        assert note.body == 'Updated body text'
+
+    def test_edit_updates_tag(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit persists the new tag."""
+        note = _create_note(db, test_user, title='Tagged note', tag='oldtag')
+        _post_edit_note(auth_client, note.id, title='Tagged note', tag='newtag')
+        db.session.refresh(note)
+        assert note.tag == 'newtag'
+
+    def test_edit_clears_tag_when_empty(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit with empty tag stores None."""
+        note = _create_note(db, test_user, title='Tag clear note', tag='removeme')
+        _post_edit_note(auth_client, note.id, title='Tag clear note', tag='')
+        db.session.refresh(note)
+        assert note.tag is None
+
+    def test_edit_sets_pinned(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit with pinned=on pins the note."""
+        note = _create_note(db, test_user, title='Pin note', pinned=False)
+        _post_edit_note(auth_client, note.id, title='Pin note', pinned=True)
+        db.session.refresh(note)
+        assert note.pinned is True
+
+    def test_edit_unsets_pinned(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit without pinned field unpins the note."""
+        note = _create_note(db, test_user, title='Unpin note', pinned=True)
+        _post_edit_note(auth_client, note.id, title='Unpin note', pinned=False)
+        db.session.refresh(note)
+        assert note.pinned is False
+
+    def test_edit_redirects_on_success(self, auth_client, db, test_user):
+        """Successful edit redirects to the notes index."""
+        note = _create_note(db, test_user, title='Redirect note')
+        response = _post_edit_note(auth_client, note.id, title='Redirect note updated')
+        assert response.status_code in (301, 302)
+        assert '/notes' in response.headers.get('Location', '')
+
+    def test_edit_missing_title_returns_422(self, auth_client, db, test_user):
+        """POST /notes/<id>/edit without a title returns 422."""
+        note = _create_note(db, test_user, title='Title required note')
+        response = _post_edit_note(auth_client, note.id, title='')
+        assert response.status_code == 422
+
+    def test_edit_htmx_returns_trigger_header(self, auth_client, db, test_user):
+        """HTMX edit request returns HX-Trigger: noteUpdated."""
+        note = _create_note(db, test_user, title='HTMX edit note')
+        response = _post_edit_note(
+            auth_client, note.id,
+            title='HTMX edited',
+            headers={'HX-Request': 'true'},
+        )
+        assert response.headers.get('HX-Trigger') == 'noteUpdated'
+
+    def test_edit_nonexistent_note_returns_404(self, auth_client):
+        """Editing a note that does not exist returns 404."""
+        response = _post_edit_note(auth_client, 999999, title='Ghost note')
+        assert response.status_code == 404
+
+    def test_edit_another_users_note_returns_404(self, auth_client, db):
+        """Users cannot edit another user's note."""
+        from app.models import User
+        other = User(username='noteeditor')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        note = _create_note(db, other, title='Others edit note')
+        response = _post_edit_note(auth_client, note.id, title='Hijacked')
+        assert response.status_code == 404
+
+    def test_edit_requires_auth(self, client, db, test_user):
+        """Unauthenticated edit attempt redirects to login."""
+        note = _create_note(db, test_user, title='Auth edit note')
+        response = client.post(f'/notes/{note.id}/edit', data={'title': 'x', 'body': ''}, follow_redirects=False)
+        assert response.status_code in (301, 302)
+
+
 class TestScratchpad:
     def test_scratchpad_requires_auth(self, client):
         """Unauthenticated GET /notes/scratchpad redirects to login."""

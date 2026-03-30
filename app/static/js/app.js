@@ -400,6 +400,13 @@
     updateGreeting();
     window.setInterval(updateClock, 1000);
     window.setInterval(updateGreeting, 60 * 1000);
+
+    /* Re-enable CSS transitions after first paint to prevent initial white flash */
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.documentElement.classList.remove('no-transition');
+      });
+    });
   }
 
   doc.addEventListener('DOMContentLoaded', init);

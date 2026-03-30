@@ -636,6 +636,8 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
   max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -1189,9 +1191,12 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
   }
 
   #quick-capture-modal {
-    width: 95%;
-    max-height: 75vh;
-    max-height: calc(75dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    width: 95vw;
+    min-width: 95vw;
+    max-width: 95vw;
+    height: 75dvh;
+    min-height: 75dvh;
+    max-height: 75dvh;
   }
 
   .modal-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }

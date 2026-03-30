@@ -633,11 +633,30 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
 }
 
 #quick-capture-modal {
+  width: min(720px, 100%);
   max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
   overflow-x: hidden;
   overflow-y: auto;
+  margin-top: 0;
+  min-width: 0;
+  height: var(--quick-capture-height, auto);
+}
+
+#quick-capture-overlay {
+  align-items: var(--quick-capture-align, end);
+  padding-top: var(--quick-capture-top-pad, .75rem);
+}
+
+#quick-capture-modal .form-row > .form-group,
+#quick-capture-modal .form-group,
+#quick-capture-modal .form-input,
+#quick-capture-modal .form-select,
+#quick-capture-modal .form-textarea {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .modal-header {
@@ -1188,15 +1207,17 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
   #quick-capture-overlay {
     padding: .5rem;
     justify-items: center;
+    --quick-capture-align: start;
+    --quick-capture-top-pad: calc(env(safe-area-inset-top) + .35rem);
   }
 
   #quick-capture-modal {
     width: 95vw;
     min-width: 95vw;
     max-width: 95vw;
-    height: 75dvh;
-    min-height: 75dvh;
-    max-height: 75dvh;
+    height: var(--quick-capture-height, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - .85rem));
+    min-height: 65dvh;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - .85rem);
   }
 
   .modal-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -13,6 +13,7 @@ Tests for HelmHub settings route:
 import json
 
 import pytest
+from sqlalchemy.orm import Session
 
 from app.models import Setting
 
@@ -279,3 +280,23 @@ class TestSettingsSaveResponse:
         assert widgets_by_id.get('tasks') is True
         assert widgets_by_id.get('reminders') is True
         assert widgets_by_id.get('today') is False
+
+
+class TestSettingGetOrCreateRace:
+    def test_get_or_create_handles_unique_race(self, db, test_user, monkeypatch):
+        """If a concurrent insert wins, get_or_create returns the existing row."""
+        original_flush = db.session.flush
+
+        def raced_flush(*args, **kwargs):
+            with Session(bind=db.engine) as other_session:
+                other_session.add(Setting(user_id=test_user.id))
+                other_session.commit()
+            return original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(db.session, 'flush', raced_flush)
+
+        setting = Setting.get_or_create(test_user.id)
+
+        assert setting is not None
+        assert setting.user_id == test_user.id
+        assert Setting.query.filter_by(user_id=test_user.id).count() == 1

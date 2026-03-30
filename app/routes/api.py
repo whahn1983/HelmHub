@@ -216,7 +216,12 @@ def quick_capture():
 
     is_htmx = request.headers.get('HX-Request') == 'true'
     is_browser_form = not request.is_json and not is_htmx
-    redirect_target = request.referrer or url_for('dashboard.index')
+
+    requested_next = (payload.get('next') or '').strip() if hasattr(payload, 'get') else ''
+    if requested_next.startswith('/') and not requested_next.startswith('//'):
+        redirect_target = requested_next
+    else:
+        redirect_target = request.referrer or url_for('dashboard.index')
 
     def _form_redirect(message, category='success'):
         flash(message, category)

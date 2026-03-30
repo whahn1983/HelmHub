@@ -4,13 +4,25 @@ Dashboard routes: the main landing page for authenticated users.
 
 from datetime import datetime, date, timedelta
 
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, request, url_for
 from flask_login import login_required, current_user
 
 from app.extensions import db
 from app.models import Task, Note, Reminder, Event, Bookmark, Setting
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/')
+
+
+
+
+def _safe_local_path(target: str | None, fallback: str = '/') -> str:
+    """Return a local path target suitable for redirects/navigation."""
+    if not target:
+        return fallback
+    cleaned = target.strip()
+    if cleaned.startswith('/') and not cleaned.startswith('//'):
+        return cleaned
+    return fallback
 
 
 @dashboard_bp.route('/')
@@ -175,4 +187,21 @@ def index():
         now=now,
         formatted_date=formatted_date,
         greeting=greeting,
+    )
+
+
+@dashboard_bp.route('/quick-capture')
+@login_required
+def quick_capture_page():
+    """Dedicated quick-capture page for compact/mobile layouts."""
+    next_url = _safe_local_path(request.args.get('next'), fallback='/')
+    capture_type = (request.args.get('type') or 'task').strip().lower()
+    if capture_type not in {'task', 'note', 'reminder', 'event', 'bookmark'}:
+        capture_type = 'task'
+
+    return render_template(
+        'quick_capture/index.html',
+        close_href=next_url,
+        next_url=next_url,
+        capture_type=capture_type,
     )

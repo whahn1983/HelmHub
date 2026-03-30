@@ -253,11 +253,20 @@
     },
 
     open(type = 'task') {
+      const captureType = type || this.getPreferredType();
+      const isMobileLayout = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+      if (isMobileLayout) {
+        const next = `${window.location.pathname}${window.location.search || ''}`;
+        const params = new URLSearchParams({ type: captureType, next });
+        window.location.href = `/quick-capture?${params.toString()}`;
+        return;
+      }
+
       if (!this.overlay) return;
       this.overlay.hidden = false;
       body.classList.add('modal-open');
       this.syncViewportPosition();
-      this.switchTab(type);
+      this.switchTab(captureType);
       const input = this.overlay.querySelector('.tab-panel.active input:not([type="hidden"]), .tab-panel.active textarea');
       if (input) input.focus();
     },

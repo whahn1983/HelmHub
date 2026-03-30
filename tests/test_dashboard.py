@@ -167,6 +167,18 @@ class TestDashboardPage:
         response = auth_client.get('/')
         assert b'Recent note' in response.data
 
+    def test_quick_capture_page_returns_200(self, auth_client):
+        """Authenticated users can load the dedicated quick capture page."""
+        response = auth_client.get('/quick-capture?type=note&next=/tasks')
+        assert response.status_code == 200
+        assert b'Quick Capture' in response.data
+
+    def test_quick_capture_page_falls_back_to_safe_close_href(self, auth_client):
+        """Unsafe next paths are ignored on the dedicated quick capture page."""
+        response = auth_client.get('/quick-capture?next=https://evil.example')
+        assert response.status_code == 200
+        assert b"window.location.href = '/'" in response.data
+
     def test_dashboard_does_not_show_other_users_data(self, auth_client, db, test_user):
         """Data belonging to other users is not leaked onto the dashboard."""
         from app.models import User

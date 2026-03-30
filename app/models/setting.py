@@ -126,6 +126,32 @@ class Setting(db.Model):
     # ------------------------------------------------------------------
 
     @classmethod
+    def _dedupe_for_user(cls, user_id: int) -> 'Setting | None':
+        """
+        Return the canonical settings row for *user_id* and remove extras.
+
+        In healthy databases there is at most one row (enforced by the unique
+        index on ``user_id``). This helper defensively cleans up older data in
+        case duplicates existed before the constraint was added or became
+        temporarily inconsistent.
+        """
+        rows = (
+            cls.query
+            .filter_by(user_id=user_id)
+            .order_by(cls.id.asc())
+            .all()
+        )
+        if not rows:
+            return None
+
+        canonical = rows[0]
+        if len(rows) > 1:
+            for duplicate in rows[1:]:
+                db.session.delete(duplicate)
+            db.session.flush()
+        return canonical
+
+    @classmethod
     def get_or_create(cls, user_id: int) -> 'Setting':
         """
         Return the existing ``Setting`` row for *user_id*, or insert a new
@@ -144,7 +170,12 @@ class Setting(db.Model):
         Setting
             The (potentially newly created) settings instance.
         """
-        instance = cls.query.filter_by(user_id=user_id).first()
+        # Prevent an unrelated pending Setting insert from being auto-flushed
+        # during the existence check (which can raise IntegrityError before we
+        # enter the guarded insert path below).
+        with db.session.no_autoflush:
+            instance = cls._dedupe_for_user(user_id)
+
         if instance is None:
             instance = cls(user_id=user_id)
             instance.set_dashboard_config(cls.DEFAULT_DASHBOARD_CONFIG)
@@ -152,10 +183,11 @@ class Setting(db.Model):
             try:
                 db.session.flush()   # assign PK without a full commit
             except IntegrityError:
-                # Another transaction may have inserted the per-user row
-                # after our initial SELECT and before this flush.
+                # Another transaction (or a previously pending duplicate row)
+                # may have inserted the per-user row before this flush.
                 db.session.rollback()
-                instance = cls.query.filter_by(user_id=user_id).first()
+                with db.session.no_autoflush:
+                    instance = cls._dedupe_for_user(user_id)
                 if instance is None:
                     raise
         return instance

@@ -254,8 +254,19 @@
 
       <!-- Disable TOTP -->
       <div class="danger-zone">
-        <form method="post" action="/settings/totp/disable">
+        <form method="post" action="/settings/totp/disable" id="disable-totp-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-group">
+            <label for="disable-totp-password" class="form-label">Confirm your password to disable two-factor authentication</label>
+            <input
+              type="password"
+              id="disable-totp-password"
+              name="password"
+              class="form-input"
+              autocomplete="current-password"
+              placeholder="Your current password"
+            >
+          </div>
           <button type="submit" class="btn btn-danger" onclick="return confirm('Disable two-factor authentication? This will make your account less secure.')">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M8 1a5 5 0 015 5c0 2.5.75 3.5 1.5 4.5H1.5C2.25 9.5 3 8.5 3 6a5 5 0 015-5z" stroke="currentColor" stroke-width="1.5"/>

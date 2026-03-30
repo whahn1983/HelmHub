@@ -51,7 +51,7 @@ cd helmhub
 # 2. Copy the example environment file
 cp .env.example .env
 
-# 3. Edit .env and set a strong SECRET_KEY and admin credentials
+# 3. Edit .env and set strong secrets and admin credentials
 nano .env
 
 # 4. Start the application
@@ -87,6 +87,7 @@ pip install -r requirements.txt
 
 # 4. Set environment variables (or create a .env file)
 export SECRET_KEY="your-secret-key-here"
+export TOTP_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
 export DATABASE_URL="postgresql://user:password@localhost:5432/helmhub"
 export FLASK_ENV="development"
 export DEFAULT_ADMIN_USERNAME="admin"
@@ -108,6 +109,7 @@ All configuration is done via environment variables. Copy `.env.example` to `.en
 | Variable | Description | Default |
 |---|---|---|
 | `SECRET_KEY` | Flask session and CSRF secret — **must be changed in production** | *(required)* |
+| `TOTP_ENCRYPTION_KEY` | Fernet key used to encrypt TOTP secrets at rest | *(required)* |
 | `DATABASE_URL` | Database connection URI | `sqlite:///helmhub.db` |
 | `APP_PORT` | Host port mapped to the container | `8080` |
 | `POSTGRES_PASSWORD` | PostgreSQL password (used by docker-compose) | `helmhub_secret` |
@@ -115,10 +117,13 @@ All configuration is done via environment variables. Copy `.env.example` to `.en
 | `DEFAULT_ADMIN_PASSWORD` | Password for the auto-created admin account | `changeme` |
 | `TZ` | Timezone for date/time display | `America/New_York` |
 | `FLASK_ENV` | Runtime environment (`production`, `development`, `testing`) | `production` |
-| `SESSION_COOKIE_SECURE` | Restrict session cookies to HTTPS | `False` |
+| `SESSION_COOKIE_SECURE` | Restrict session cookies to HTTPS | `True` |
+| `PROXY_FIX_X_FOR` | Trusted `X-Forwarded-For` proxy hop count | `0` |
+| `PROXY_FIX_X_PROTO` | Trusted `X-Forwarded-Proto` proxy hop count | `0` |
 
 **For production deployments**, always set:
 - A long, random `SECRET_KEY`
+- A valid Fernet `TOTP_ENCRYPTION_KEY` (generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`)
 - A strong `DEFAULT_ADMIN_PASSWORD` (or change the password immediately after first login)
 - `SESSION_COOKIE_SECURE=True` if serving over HTTPS
 

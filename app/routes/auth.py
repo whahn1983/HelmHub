@@ -15,6 +15,16 @@ from app.services.totp_service import verify_totp_token
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
+def _safe_next_target(target: str | None) -> str | None:
+    """Return a safe internal redirect target, else ``None``."""
+    if not target:
+        return None
+    cleaned = target.strip()
+    if not cleaned.startswith('/') or cleaned.startswith('//'):
+        return None
+    return cleaned
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------
@@ -51,8 +61,8 @@ def login():
         login_user(user, remember=remember_me)
         flash('Welcome back!', 'success')
 
-        next_page = request.args.get('next')
-        if next_page and next_page.startswith('/'):
+        next_page = _safe_next_target(request.args.get('next'))
+        if next_page:
             return redirect(next_page)
         return redirect(url_for('dashboard.index'))
 
@@ -107,8 +117,8 @@ def totp():
         login_user(user, remember=remember_me)
         flash('Welcome back!', 'success')
 
-        next_page = request.args.get('next')
-        if next_page and next_page.startswith('/'):
+        next_page = _safe_next_target(request.args.get('next'))
+        if next_page:
             return redirect(next_page)
         return redirect(url_for('dashboard.index'))
 

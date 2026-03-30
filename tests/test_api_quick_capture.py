@@ -43,3 +43,17 @@ def test_quick_capture_json_still_returns_json(auth_client, test_user):
 
     task = Task.query.filter_by(user_id=test_user.id, title='Quick task from json').first()
     assert task is not None
+
+
+def test_quick_capture_requires_csrf_when_enabled(app, auth_client):
+    """Session-authenticated API POST is rejected when CSRF is enabled and token is missing."""
+    app.config['WTF_CSRF_ENABLED'] = True
+    try:
+        response = auth_client.post(
+            '/api/quick-capture',
+            data={'type': 'task', 'title': 'No CSRF token'},
+            follow_redirects=False,
+        )
+        assert response.status_code == 400
+    finally:
+        app.config['WTF_CSRF_ENABLED'] = False

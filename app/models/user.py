@@ -31,10 +31,12 @@ from typing import Optional
 
 import bcrypt
 import pyotp
+from flask import current_app, has_app_context
 from flask_login import UserMixin
 from sqlalchemy.orm import relationship
 
 from app.extensions import db
+from app.services.crypto_service import EncryptionKeyError, decrypt_value, encrypt_value
 
 
 class User(UserMixin, db.Model):
@@ -59,8 +61,8 @@ class User(UserMixin, db.Model):
 
     # TOTP / 2FA
     totp_enabled = db.Column(db.Boolean, default=False, nullable=False)
-    # Stored encrypted in production; raw base32 for development
-    totp_secret = db.Column(db.String(255), nullable=True)
+    # Stored encrypted at rest; exposed via ``totp_secret`` property below.
+    _totp_secret = db.Column('totp_secret', db.Text, nullable=True)
     # JSON list of bcrypt-hashed one-time recovery codes
     totp_recovery_codes = db.Column(db.Text, nullable=True)
 
@@ -152,6 +154,32 @@ class User(UserMixin, db.Model):
     # TOTP helpers
     # ------------------------------------------------------------------
 
+    @property
+    def totp_secret(self) -> str | None:
+        """Return the decrypted TOTP secret or ``None`` when unset."""
+        if not self._totp_secret:
+            return None
+        if not has_app_context():
+            return self._totp_secret
+        return decrypt_value(
+            self._totp_secret,
+            current_app.config.get('TOTP_ENCRYPTION_KEY'),
+        )
+
+    @totp_secret.setter
+    def totp_secret(self, value: str | None) -> None:
+        """Encrypt and store *value* as the TOTP secret."""
+        if not value:
+            self._totp_secret = None
+            return
+        if not has_app_context():
+            self._totp_secret = value
+            return
+        self._totp_secret = encrypt_value(
+            value,
+            current_app.config.get('TOTP_ENCRYPTION_KEY'),
+        )
+
     def get_totp_uri(self, app_name: str = 'HelmHub') -> str:
         """
         Return an ``otpauth://`` URI suitable for QR-code generation.
@@ -180,6 +208,8 @@ class User(UserMixin, db.Model):
         try:
             totp = pyotp.TOTP(self.totp_secret)
             return totp.verify(token, valid_window=1)
+        except EncryptionKeyError:
+            return False
         except Exception:
             return False
 

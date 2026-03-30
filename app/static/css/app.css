@@ -1185,10 +1185,13 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
 
   #quick-capture-overlay {
     padding: .5rem;
+    justify-items: center;
   }
 
   #quick-capture-modal {
-    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - .5rem);
+    width: 95%;
+    max-height: 75vh;
+    max-height: calc(75dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 
   .modal-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }

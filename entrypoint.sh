@@ -2,15 +2,15 @@
 set -e
 
 HTMX_PATH="app/static/js/htmx.min.js"
-HTMX_VERSION="1.9.12"
+# Fetch the latest published release of htmx on every container startup.
+# The committed file in the repo is a pinned dev fallback; production always
+# pulls fresh so it stays current without requiring image rebuilds.
+HTMX_URL="https://unpkg.com/htmx.org/dist/htmx.min.js"
 
-# Download htmx if not present or placeholder
-if [ ! -f "$HTMX_PATH" ] || grep -q "placeholder" "$HTMX_PATH" 2>/dev/null; then
-    echo "Downloading htmx ${HTMX_VERSION}..."
-    curl -fsSL "https://unpkg.com/htmx.org@${HTMX_VERSION}/dist/htmx.min.js" -o "$HTMX_PATH" \
-        || wget -qO "$HTMX_PATH" "https://unpkg.com/htmx.org@${HTMX_VERSION}/dist/htmx.min.js" \
-        || echo "Warning: Could not download htmx. Install manually."
-fi
+echo "Downloading latest htmx..."
+curl -fsSL "$HTMX_URL" -o "$HTMX_PATH" \
+    || wget -qO "$HTMX_PATH" "$HTMX_URL" \
+    || echo "Warning: Could not download htmx. Falling back to bundled version."
 
 echo "Running database migrations..."
 flask db upgrade

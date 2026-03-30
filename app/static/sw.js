@@ -1,5 +1,5 @@
 /* HelmHub Service Worker */
-const CACHE_NAME = 'helmhub-v1';
+const CACHE_NAME = 'helmhub-v2';
 const STATIC_ASSETS = [
   '/static/css/app.css',
   '/static/js/app.js',

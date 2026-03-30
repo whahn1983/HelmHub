@@ -124,6 +124,7 @@
     overlay: null,
     frame: null,
     title: null,
+    _closing: false,
 
     init() {
       this.overlay = $('#entity-form-overlay');
@@ -145,6 +146,8 @@
       });
 
       this.frame.addEventListener('load', () => {
+        // Guard: ignore the load event we triggered ourselves by setting src='about:blank'
+        if (this._closing) return;
         try {
           const framePath = this.frame.contentWindow?.location?.pathname || '';
           if (!framePath.endsWith('/new') && !framePath.includes('/edit')) {
@@ -164,6 +167,7 @@
 
     open(url, title) {
       if (!url || !this.overlay || !this.frame) return;
+      this._closing = false;
       if (this.title) this.title.textContent = title;
       this.frame.src = url;
       this.overlay.hidden = false;
@@ -172,6 +176,7 @@
 
     close(refresh = false) {
       if (!this.overlay || !this.frame) return;
+      this._closing = true;
       this.overlay.hidden = true;
       this.frame.src = 'about:blank';
       body.classList.remove('modal-open');

@@ -292,7 +292,8 @@
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
-      if (banner && !localStorage.getItem('pwa-dismissed')) banner.hidden = false;
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+      if (banner && !localStorage.getItem('pwa-dismissed') && !isStandalone) banner.hidden = false;
     });
 
     if (installBtn) {

@@ -317,14 +317,14 @@ def _register_security_headers(app: Flask) -> None:
 
     @app.after_request
     def add_security_headers(response):  # noqa: WPS430
-        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
         response.headers.setdefault('X-Content-Type-Options', 'nosniff')
         response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
         response.headers.setdefault(
             'Content-Security-Policy',
-            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; "
             "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
-            "frame-ancestors 'none'",
+            "frame-ancestors 'self'",
         )
         if request_is_secure():
             response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')

@@ -12,7 +12,7 @@
       <input type="file" name="bookmark_file" accept=".html,text/html" class="form-input" aria-label="Import bookmarks HTML" required>
       <button type="submit" class="btn" aria-label="Import bookmarks">Import</button>
     </form>
-    <a href="/bookmarks/new" class="btn btn-primary" aria-label="New bookmark">
+    <a href="/bookmarks/new" class="btn btn-primary" data-modal-form data-modal-title="Add Bookmark" aria-label="New bookmark">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
@@ -117,7 +117,7 @@
       </p>
       {% if not pinned_only and not search and not category %}
         <p class="empty-state-body">Save links to your favourite sites, tools, and resources.</p>
-        <a href="/bookmarks/new" class="btn btn-primary">Add a bookmark</a>
+        <a href="/bookmarks/new" class="btn btn-primary" data-modal-form data-modal-title="Add Bookmark">Add a bookmark</a>
       {% endif %}
     </div>
   {% endif %}

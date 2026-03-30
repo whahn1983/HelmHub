@@ -537,8 +537,9 @@
     window.addEventListener('beforeinstallprompt', function(e) {
       e.preventDefault();
       deferredPrompt = e;
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
       var banner = document.getElementById('pwa-banner');
-      if (banner && !localStorage.getItem('pwa-dismissed')) {
+      if (banner && !localStorage.getItem('pwa-dismissed') && !isStandalone) {
         banner.hidden = false;
       }
     });

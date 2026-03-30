@@ -300,3 +300,21 @@ class TestSettingGetOrCreateRace:
         assert setting is not None
         assert setting.user_id == test_user.id
         assert Setting.query.filter_by(user_id=test_user.id).count() == 1
+
+    def test_get_or_create_ignores_pending_duplicate_before_select(self, db, test_user):
+        """A pending duplicate in session should not auto-flush during lookup."""
+        existing = Setting(user_id=test_user.id)
+        db.session.add(existing)
+        db.session.commit()
+
+        # Simulate a stale/duplicate pending instance left in the same session.
+        db.session.add(Setting(user_id=test_user.id))
+
+        setting = Setting.get_or_create(test_user.id)
+
+        assert setting is not None
+        assert setting.id == existing.id
+
+        # Clear failed/pending state so fixture teardown can proceed cleanly.
+        db.session.rollback()
+

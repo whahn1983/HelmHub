@@ -9,9 +9,14 @@ Bookmark model fields: title, url, description, category (tag string), pinned.
 
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    request, flash, abort, make_response,
+    request, flash, abort, make_response, Response,
 )
 from flask_login import login_required, current_user
+
+
+from html import escape
+from html.parser import HTMLParser
+from urllib.parse import urlparse
 
 from app.extensions import db
 from app.models import Bookmark
@@ -22,6 +27,95 @@ bookmarks_bp = Blueprint('bookmarks', __name__, url_prefix='/bookmarks')
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+MAX_BOOKMARK_IMPORT_SIZE = 2 * 1024 * 1024
+ALLOWED_BOOKMARK_SCHEMES = {'http', 'https', 'ftp'}
+
+
+class _NetscapeBookmarkParser(HTMLParser):
+    """Parse Netscape bookmark HTML into bookmark dictionaries."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.entries = []
+        self._folder_stack = []
+        self._in_h3 = False
+        self._in_a = False
+        self._pending_href = ''
+        self._pending_title_parts = []
+        self._current_folder_parts = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs_map = dict(attrs)
+        if tag.lower() == 'h3':
+            self._in_h3 = True
+            self._current_folder_parts = []
+        elif tag.lower() == 'a':
+            self._in_a = True
+            self._pending_href = attrs_map.get('href', '')
+            self._pending_title_parts = []
+
+    def handle_endtag(self, tag):
+        lower = tag.lower()
+        if lower == 'h3':
+            self._in_h3 = False
+            folder_name = ''.join(self._current_folder_parts).strip()
+            if folder_name:
+                self._folder_stack.append(folder_name)
+        elif lower == 'dl':
+            if self._folder_stack:
+                self._folder_stack.pop()
+        elif lower == 'a':
+            self._in_a = False
+            title = ''.join(self._pending_title_parts).strip()
+            href = (self._pending_href or '').strip()
+            if href:
+                category = self._folder_stack[-1].strip().lower() if self._folder_stack else None
+                self.entries.append({
+                    'title': title or href,
+                    'url': href,
+                    'category': category or None,
+                })
+
+    def handle_data(self, data):
+        if self._in_h3:
+            self._current_folder_parts.append(data)
+        elif self._in_a:
+            self._pending_title_parts.append(data)
+
+
+def _is_safe_bookmark_url(url: str) -> bool:
+    """Allow only valid absolute URLs with safe schemes."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ALLOWED_BOOKMARK_SCHEMES:
+        return False
+    if not parsed.netloc:
+        return False
+    return True
+
+
+def _normalise_imported_bookmark(entry: dict) -> dict | None:
+    """Sanitise imported bookmark entry and return a safe representation."""
+    title = (entry.get('title') or '').strip()[:255]
+    raw_url = (entry.get('url') or '').strip()
+    parsed_raw = urlparse(raw_url)
+    if parsed_raw.scheme and parsed_raw.scheme.lower() not in ALLOWED_BOOKMARK_SCHEMES:
+        return None
+
+    url = _normalise_url(raw_url)
+    category = ((entry.get('category') or '').strip().lower() or None)
+
+    if category:
+        category = category[:64]
+
+    if not url or not _is_safe_bookmark_url(url):
+        return None
+
+    if not title:
+        title = url
+
+    return {'title': title, 'url': url, 'category': category}
+
 
 def _is_htmx():
     return request.headers.get('HX-Request') == 'true'
@@ -247,3 +341,135 @@ def pin(bookmark_id):
         return response
 
     return redirect(request.referrer or url_for('bookmarks.index'))
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+@bookmarks_bp.route('/export', methods=['GET'])
+@login_required
+def export_bookmarks():
+    """Export bookmarks using the Netscape bookmark HTML format."""
+    bookmarks = (
+        Bookmark.query
+        .filter_by(user_id=current_user.id)
+        .order_by(Bookmark.category.asc().nullslast(), Bookmark.title.asc())
+        .all()
+    )
+
+    lines = [
+        '<!DOCTYPE NETSCAPE-Bookmark-file-1>',
+        '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+        '<TITLE>Bookmarks</TITLE>',
+        '<H1>Bookmarks</H1>',
+        '<DL><p>',
+    ]
+
+    grouped = {}
+    for bm in bookmarks:
+        key = bm.category or 'uncategorized'
+        grouped.setdefault(key, []).append(bm)
+
+    for category in sorted(grouped.keys()):
+        lines.append(f'  <DT><H3>{escape(category)}</H3>')
+        lines.append('  <DL><p>')
+        for bm in grouped[category]:
+            lines.append(
+                f'    <DT><A HREF="{escape(bm.url, quote=True)}">{escape(bm.title)}</A>'
+            )
+        lines.append('  </DL><p>')
+
+    lines.append('</DL><p>')
+
+    payload = '\n'.join(lines)
+    response = Response(payload, mimetype='text/html; charset=utf-8')
+    response.headers['Content-Disposition'] = 'attachment; filename=helmhub-bookmarks.html'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Import
+# ---------------------------------------------------------------------------
+
+@bookmarks_bp.route('/import', methods=['POST'])
+@login_required
+def import_bookmarks():
+    """Import bookmarks from Netscape bookmark HTML with safe upsert semantics."""
+    uploaded = request.files.get('bookmark_file')
+    if not uploaded or not uploaded.filename:
+        flash('Please choose an HTML bookmarks file to import.', 'danger')
+        return redirect(url_for('bookmarks.index'))
+
+    raw_data = uploaded.read(MAX_BOOKMARK_IMPORT_SIZE + 1)
+    if len(raw_data) > MAX_BOOKMARK_IMPORT_SIZE:
+        flash('Import file is too large. Maximum size is 2 MB.', 'danger')
+        return redirect(url_for('bookmarks.index'))
+
+    try:
+        html_text = raw_data.decode('utf-8', errors='strict')
+    except UnicodeDecodeError:
+        flash('Import failed: file must be valid UTF-8 encoded HTML.', 'danger')
+        return redirect(url_for('bookmarks.index'))
+
+    parser = _NetscapeBookmarkParser()
+    try:
+        parser.feed(html_text)
+        parser.close()
+    except Exception:
+        flash('Import failed: unable to parse bookmark HTML file.', 'danger')
+        return redirect(url_for('bookmarks.index'))
+
+    if not parser.entries:
+        flash('No bookmark entries were found in the uploaded file.', 'warning')
+        return redirect(url_for('bookmarks.index'))
+
+    existing = {
+        row.url: row
+        for row in Bookmark.query.filter_by(user_id=current_user.id).all()
+    }
+
+    unique_import_rows = {}
+    for entry in parser.entries:
+        normalised = _normalise_imported_bookmark(entry)
+        if not normalised:
+            continue
+        unique_import_rows[normalised['url']] = normalised
+
+    created = 0
+    updated = 0
+
+    for row in unique_import_rows.values():
+        current = existing.get(row['url'])
+        if current is None:
+            db.session.add(
+                Bookmark(
+                    user_id=current_user.id,
+                    title=row['title'],
+                    url=row['url'],
+                    category=row['category'],
+                    pinned=False,
+                )
+            )
+            created += 1
+            continue
+
+        changed = False
+        if current.title != row['title']:
+            current.title = row['title']
+            changed = True
+        if current.category != row['category']:
+            current.category = row['category']
+            changed = True
+        if changed:
+            updated += 1
+
+    db.session.commit()
+
+    skipped = len(parser.entries) - len(unique_import_rows)
+    flash(
+        f'Bookmark import complete: {created} added, {updated} updated, {skipped} skipped.',
+        'success',
+    )
+    return redirect(url_for('bookmarks.index'))

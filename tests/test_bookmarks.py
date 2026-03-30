@@ -12,6 +12,7 @@ Tests for HelmHub bookmark management routes and model:
 """
 
 import pytest
+from io import BytesIO
 
 from app.models import Bookmark
 
@@ -560,3 +561,80 @@ class TestBookmarkPin:
             f'/bookmarks/{bookmark.id}/pin', follow_redirects=False
         )
         assert response.status_code in (301, 302)
+
+
+# ---------------------------------------------------------------------------
+# Import / Export
+# ---------------------------------------------------------------------------
+
+class TestBookmarkImportExport:
+    def test_export_returns_netscape_html(self, auth_client, db, test_user):
+        """GET /bookmarks/export returns an attachment in Netscape HTML format."""
+        _create_bookmark(db, test_user, title='Docs', url='https://docs.python.org', category='dev')
+
+        response = auth_client.get('/bookmarks/export')
+
+        assert response.status_code == 200
+        assert 'attachment; filename=helmhub-bookmarks.html' in response.headers.get('Content-Disposition', '')
+        assert b'<!DOCTYPE NETSCAPE-Bookmark-file-1>' in response.data
+        assert b'https://docs.python.org' in response.data
+
+    def test_import_adds_and_updates_without_duplicates(self, auth_client, db, test_user):
+        """Import upserts by URL and does not create duplicates."""
+        _create_bookmark(db, test_user, title='Old Docs', url='https://docs.python.org', category='old')
+
+        payload = b"""<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+  <DT><H3>Dev</H3>
+  <DL><p>
+    <DT><A HREF=\"https://docs.python.org\">Python Docs</A>
+    <DT><A HREF=\"https://flask.palletsprojects.com\">Flask</A>
+    <DT><A HREF=\"https://flask.palletsprojects.com\">Flask Duplicate</A>
+  </DL><p>
+</DL><p>
+"""
+        response = auth_client.post(
+            '/bookmarks/import',
+            data={'bookmark_file': (BytesIO(payload), 'bookmarks.html')},
+            content_type='multipart/form-data',
+            follow_redirects=False,
+        )
+
+        assert response.status_code in (301, 302)
+
+        bookmarks = Bookmark.query.filter_by(user_id=test_user.id).all()
+        by_url = {b.url: b for b in bookmarks}
+        assert len(by_url) == 2
+        assert by_url['https://docs.python.org'].title == 'Python Docs'
+        assert by_url['https://docs.python.org'].category == 'dev'
+        assert by_url['https://flask.palletsprojects.com'].title == 'Flask Duplicate'
+
+    def test_import_skips_unsafe_schemes(self, auth_client, db, test_user):
+        """Import ignores javascript/data schemes for safety."""
+        payload = b"""<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+  <DT><A HREF=\"javascript:alert(1)\">Bad</A>
+  <DT><A HREF=\"data:text/html;base64,abcd\">Bad2</A>
+</DL><p>
+"""
+        auth_client.post(
+            '/bookmarks/import',
+            data={'bookmark_file': (BytesIO(payload), 'bookmarks.html')},
+            content_type='multipart/form-data',
+            follow_redirects=False,
+        )
+
+        bookmarks = Bookmark.query.filter_by(user_id=test_user.id).all()
+        assert bookmarks == []
+
+    def test_import_rejects_non_utf8(self, auth_client, db, test_user):
+        """Import rejects non-UTF8 payloads."""
+        response = auth_client.post(
+            '/bookmarks/import',
+            data={'bookmark_file': (BytesIO(b'\xff\xfe\x00'), 'bookmarks.html')},
+            content_type='multipart/form-data',
+            follow_redirects=False,
+        )
+
+        assert response.status_code in (301, 302)
+        assert Bookmark.query.filter_by(user_id=test_user.id).count() == 0

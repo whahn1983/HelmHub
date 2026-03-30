@@ -1,6 +1,10 @@
-# HelmHub
+# <img width="64" height="64" alt="icon-512" src="https://github.com/user-attachments/assets/a494ebab-5734-4a9a-b379-4596e8b3124b" /> HelmHub
 
 A self-hosted personal command center PWA for tasks, notes, reminders, events, bookmarks, and daily focus. Built with Flask, HTMX, PostgreSQL, and Docker.
+
+
+<img width="2239" height="1226" alt="screenshot" src="https://github.com/user-attachments/assets/d6c0b734-d1e9-4875-9d5f-374a68b2d660" />
+
 
 ---
 

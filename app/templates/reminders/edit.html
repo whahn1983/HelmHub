@@ -80,7 +80,7 @@
         <button type="submit" class="btn btn-primary">
           {% if reminder %}Save Changes{% else %}Set Reminder{% endif %}
         </button>
-        <a href="/reminders" class="btn btn-ghost">Cancel</a>
+        <button type="button" class="btn btn-ghost" onclick="window.parent !== window ? window.parent.postMessage('helmhub:cancel-entity-modal', '*') : window.location.href='/reminders'">Cancel</button>
         {% if reminder %}
           <button
             type="button"

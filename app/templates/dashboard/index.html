@@ -402,10 +402,19 @@
                   <li class="bookmark-preview-item {% if bookmark.pinned %}bookmark-preview-pinned{% endif %}">
                     <a href="{{ bookmark.url }}" target="_blank" rel="noopener noreferrer" class="bookmark-preview-link" title="{{ bookmark.url }}">
                       <span class="bookmark-preview-icon" aria-hidden="true">
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                          <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/>
-                          <path d="M6.5 1.5C5.2 3 4.5 4.7 4.5 6.5s.7 3.5 2 5M6.5 1.5C7.8 3 8.5 4.7 8.5 6.5s-.7 3.5-2 5M1.5 6.5h10" stroke="currentColor" stroke-width="1.2"/>
-                        </svg>
+                        {% if bookmark.favicon_url %}
+                          <img src="{{ bookmark.favicon_url }}" width="13" height="13" alt="" loading="lazy"
+                               onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
+                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true" style="display:none">
+                            <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/>
+                            <path d="M6.5 1.5C5.2 3 4.5 4.7 4.5 6.5s.7 3.5 2 5M6.5 1.5C7.8 3 8.5 4.7 8.5 6.5s-.7 3.5-2 5M1.5 6.5h10" stroke="currentColor" stroke-width="1.2"/>
+                          </svg>
+                        {% else %}
+                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                            <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/>
+                            <path d="M6.5 1.5C5.2 3 4.5 4.7 4.5 6.5s.7 3.5 2 5M6.5 1.5C7.8 3 8.5 4.7 8.5 6.5s-.7 3.5-2 5M1.5 6.5h10" stroke="currentColor" stroke-width="1.2"/>
+                          </svg>
+                        {% endif %}
                       </span>
                       <span class="bookmark-preview-title">{{ bookmark.title }}</span>
                       {% if bookmark.pinned %}

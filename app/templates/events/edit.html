@@ -107,7 +107,7 @@
         <button type="submit" class="btn btn-primary">
           {% if event %}Save Changes{% else %}Add Event{% endif %}
         </button>
-        <a href="/events" class="btn btn-ghost">Cancel</a>
+        <button type="button" class="btn btn-ghost" onclick="window.parent !== window ? window.parent.postMessage('helmhub:cancel-entity-modal', '*') : window.location.href='/events'">Cancel</button>
         {% if event %}
           <button
             type="button"

@@ -113,7 +113,7 @@
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Add Task</button>
-        <a href="/tasks" class="btn btn-ghost">Cancel</a>
+        <button type="button" class="btn btn-ghost" onclick="window.parent !== window ? window.parent.postMessage('helmhub:cancel-entity-modal', '*') : window.location.href='/tasks'">Cancel</button>
       </div>
     </form>
   </div>

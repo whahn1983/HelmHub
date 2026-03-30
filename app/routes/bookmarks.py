@@ -145,7 +145,7 @@ def _normalise_url(url: str) -> str:
 # Favicon proxy helpers
 # ---------------------------------------------------------------------------
 
-_favicon_cache: dict = {}  # domain -> (resolved_url, timestamp)
+_favicon_cache: dict = {}  # domain -> (prefer_direct, timestamp)
 _FAVICON_CACHE_TTL = 3600  # seconds
 
 _SAFE_DOMAIN_RE = re.compile(r'^[a-zA-Z0-9.\-]+(:\d+)?$')
@@ -178,6 +178,26 @@ def _probe_direct_favicon(domain: str) -> bool:
         # Network/proxy/transient errors should not force a fallback provider;
         # let the browser attempt the direct favicon URL itself.
         return True
+
+
+def _download_favicon(url: str) -> tuple[bytes, str] | None:
+    """Fetch favicon bytes and best-effort content type from a URL."""
+    try:
+        req = urllib.request.Request(
+            url,
+            method='GET',
+            headers={'User-Agent': 'Mozilla/5.0 HelmHub/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status >= 400:
+                return None
+            content = resp.read()
+            if not content:
+                return None
+            content_type = (resp.headers.get('Content-Type') or 'image/x-icon').split(';', 1)[0].strip()
+            return content, content_type
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -409,8 +429,8 @@ def pin(bookmark_id):
 
 @bookmarks_bp.route('/favicon')
 @login_required
-def favicon_redirect():
-    """Resolve and redirect to the best available favicon for a domain.
+def favicon_proxy():
+    """Fetch and serve a favicon via same-origin response.
 
     Resolution order:
       1. https://{domain}/favicon.ico  (direct, prefers HTTPS)
@@ -426,16 +446,26 @@ def favicon_redirect():
 
     now = time.time()
     cached = _favicon_cache.get(domain)
+    direct_url = f'https://{domain}/favicon.ico'
+    fallback_url = f'https://www.google.com/s2/favicons?domain={domain}&sz=32'
+
     if cached and now - cached[1] < _FAVICON_CACHE_TTL:
-        return redirect(cached[0], code=302)
-
-    if _probe_direct_favicon(domain):
-        resolved = f'https://{domain}/favicon.ico'
+        prefer_direct = cached[0]
     else:
-        resolved = f'https://www.google.com/s2/favicons?domain={domain}&sz=32'
+        prefer_direct = _probe_direct_favicon(domain)
+        _favicon_cache[domain] = (prefer_direct, now)
 
-    _favicon_cache[domain] = (resolved, now)
-    return redirect(resolved, code=302)
+    candidates = [direct_url, fallback_url] if prefer_direct else [fallback_url, direct_url]
+    for candidate in candidates:
+        fetched = _download_favicon(candidate)
+        if fetched:
+            content, content_type = fetched
+            response = make_response(content)
+            response.headers['Content-Type'] = content_type
+            response.headers['Cache-Control'] = 'public, max-age=86400'
+            return response
+
+    abort(502)
 
 
 # ---------------------------------------------------------------------------

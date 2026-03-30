@@ -145,6 +145,27 @@ class TestBookmarkFaviconHelpers:
         assert _probe_direct_favicon('example.com') is True
 
 
+class TestBookmarkFaviconProxy:
+    def test_favicon_proxy_returns_image_without_redirect(self, auth_client, monkeypatch):
+        """The endpoint should serve bytes directly so CSP/connect-src is not required."""
+        monkeypatch.setattr('app.routes.bookmarks._probe_direct_favicon', lambda _domain: True)
+        monkeypatch.setattr(
+            'app.routes.bookmarks._download_favicon',
+            lambda _url: (b'ico-bytes', 'image/x-icon'),
+        )
+
+        response = auth_client.get('/bookmarks/favicon?domain=example.com')
+        assert response.status_code == 200
+        assert response.location is None
+        assert response.data == b'ico-bytes'
+        assert response.headers.get('Content-Type') == 'image/x-icon'
+
+    def test_favicon_proxy_rejects_private_hosts(self, auth_client):
+        """The endpoint should block private/localhost domains."""
+        response = auth_client.get('/bookmarks/favicon?domain=127.0.0.1')
+        assert response.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # Bookmark list
 # ---------------------------------------------------------------------------

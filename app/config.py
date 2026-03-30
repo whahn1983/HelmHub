@@ -81,6 +81,7 @@ class DevelopmentConfig(BaseConfig):
 
     DEBUG: bool = True
     SQLALCHEMY_ECHO: bool = False
+    SESSION_COOKIE_SECURE: bool = False
 
 
 class ProductionConfig(BaseConfig):

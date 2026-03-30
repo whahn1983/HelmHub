@@ -7,6 +7,11 @@ Supports both full-page and HTMX partial responses.
 Bookmark model fields: title, url, description, category (tag string), pinned.
 """
 
+import re
+import time
+import urllib.request
+import urllib.error
+
 from flask import (
     Blueprint, render_template, redirect, url_for,
     request, flash, abort, make_response, Response,
@@ -134,6 +139,36 @@ def _normalise_url(url: str) -> str:
     if url and not url.startswith(('http://', 'https://', 'ftp://')):
         url = 'https://' + url
     return url
+
+
+# ---------------------------------------------------------------------------
+# Favicon proxy helpers
+# ---------------------------------------------------------------------------
+
+_favicon_cache: dict = {}  # domain -> (resolved_url, timestamp)
+_FAVICON_CACHE_TTL = 3600  # seconds
+
+_SAFE_DOMAIN_RE = re.compile(r'^[a-zA-Z0-9.\-]+(:\d+)?$')
+_PRIVATE_HOST_RE = re.compile(
+    r'^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::1'
+    r'|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+'
+    r'|192\.168\.\d+\.\d+)$',
+    re.IGNORECASE,
+)
+
+
+def _probe_direct_favicon(domain: str) -> bool:
+    """Return True if https://{domain}/favicon.ico responds with a non-error status."""
+    try:
+        req = urllib.request.Request(
+            f'https://{domain}/favicon.ico',
+            method='HEAD',
+            headers={'User-Agent': 'Mozilla/5.0 HelmHub/1.0'},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            return resp.status < 400
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +392,41 @@ def pin(bookmark_id):
         return response
 
     return redirect(request.referrer or url_for('bookmarks.index'))
+
+
+# ---------------------------------------------------------------------------
+# Favicon proxy
+# ---------------------------------------------------------------------------
+
+@bookmarks_bp.route('/favicon')
+@login_required
+def favicon_redirect():
+    """Resolve and redirect to the best available favicon for a domain.
+
+    Resolution order:
+      1. https://{domain}/favicon.ico  (direct, prefers HTTPS)
+      2. Google favicon service         (last fallback)
+    """
+    domain = request.args.get('domain', '').strip()
+    if not domain or not _SAFE_DOMAIN_RE.match(domain):
+        abort(400)
+
+    host = domain.split(':')[0]
+    if _PRIVATE_HOST_RE.match(host):
+        abort(400)
+
+    now = time.time()
+    cached = _favicon_cache.get(domain)
+    if cached and now - cached[1] < _FAVICON_CACHE_TTL:
+        return redirect(cached[0], code=302)
+
+    if _probe_direct_favicon(domain):
+        resolved = f'https://{domain}/favicon.ico'
+    else:
+        resolved = f'https://www.google.com/s2/favicons?domain={domain}&sz=32'
+
+    _favicon_cache[domain] = (resolved, now)
+    return redirect(resolved, code=302)
 
 
 # ---------------------------------------------------------------------------

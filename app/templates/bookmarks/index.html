@@ -6,18 +6,43 @@
 <div class="page-header">
   <h1 class="page-title">Bookmarks</h1>
   <div class="page-header-actions" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-    <a href="/bookmarks/export" class="btn" aria-label="Export bookmarks">Export</a>
-    <form method="post" action="/bookmarks/import" enctype="multipart/form-data" style="display:flex; gap:0.4rem; align-items:center;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="file" name="bookmark_file" accept=".html,text/html" class="form-input" aria-label="Import bookmarks HTML" required>
-      <button type="submit" class="btn" aria-label="Import bookmarks">Import</button>
-    </form>
+    <button class="btn" onclick="openImportExportModal()" aria-label="Import or export bookmarks">Import / Export</button>
     <a href="/bookmarks/new" class="btn btn-primary" data-modal-form data-modal-title="Add Bookmark" aria-label="New bookmark">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
       New Bookmark
     </a>
+  </div>
+</div>
+
+<!-- Import / Export Modal -->
+<div class="modal-overlay" id="import-export-overlay" role="dialog" aria-modal="true" aria-labelledby="import-export-title" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="import-export-title">Import / Export</h2>
+      <button class="modal-close btn-icon" type="button" onclick="closeImportExportModal()" aria-label="Close modal">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <section style="margin-bottom:1.5rem;">
+        <h3 style="margin-bottom:0.5rem; font-size:0.95rem; font-weight:600;">Export</h3>
+        <p style="margin-bottom:0.75rem; color:var(--text-secondary); font-size:0.875rem;">Download all your bookmarks as a Netscape HTML file compatible with all major browsers.</p>
+        <a href="/bookmarks/export" class="btn" aria-label="Download bookmarks file">Export Bookmarks</a>
+      </section>
+      <section>
+        <h3 style="margin-bottom:0.5rem; font-size:0.95rem; font-weight:600;">Import</h3>
+        <p style="margin-bottom:0.75rem; color:var(--text-secondary); font-size:0.875rem;">Import bookmarks from a Netscape HTML file exported from any browser.</p>
+        <form method="post" action="/bookmarks/import" enctype="multipart/form-data" style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="file" name="bookmark_file" accept=".html,text/html" class="form-input" aria-label="Choose bookmarks HTML file" required>
+          <button type="submit" class="btn btn-primary" aria-label="Import selected file">Import</button>
+        </form>
+      </section>
+    </div>
   </div>
 </div>
 
@@ -146,5 +171,34 @@
       }, 400);
     });
   }
+
+  // Import / Export modal
+  function openImportExportModal() {
+    var overlay = document.getElementById('import-export-overlay');
+    overlay.hidden = false;
+    document.body.classList.add('modal-open');
+  }
+
+  function closeImportExportModal() {
+    var overlay = document.getElementById('import-export-overlay');
+    overlay.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var overlay = document.getElementById('import-export-overlay');
+    if (overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeImportExportModal();
+      });
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var overlay = document.getElementById('import-export-overlay');
+      if (overlay && !overlay.hidden) closeImportExportModal();
+    }
+  });
 </script>
 {% endblock %}

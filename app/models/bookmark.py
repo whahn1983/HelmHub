@@ -66,13 +66,16 @@ class Bookmark(db.Model):
 
     @property
     def favicon_url(self) -> str:
-        """Return Google's favicon service URL for this bookmark's domain."""
+        """Return a backend favicon-proxy URL for this bookmark's domain."""
         from urllib.parse import urlparse
-        parsed = urlparse(self.url or '')
-        domain = parsed.netloc
-        if not domain:
+        url = self.url or ''
+        if url and not url.startswith(('http://', 'https://', 'ftp://')):
+            url = 'https://' + url
+        parsed = urlparse(url)
+        netloc = parsed.netloc
+        if not netloc:
             return ''
-        return f'https://www.google.com/s2/favicons?domain={domain}&sz=32'
+        return f'/bookmarks/favicon?domain={netloc}'
 
     @property
     def display_url(self) -> str:

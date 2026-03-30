@@ -158,17 +158,26 @@ _PRIVATE_HOST_RE = re.compile(
 
 
 def _probe_direct_favicon(domain: str) -> bool:
-    """Return True if https://{domain}/favicon.ico responds with a non-error status."""
+    """Return True when the direct favicon URL appears reachable.
+
+    We intentionally avoid ``HEAD`` requests here because many sites reject
+    HEAD while still serving a valid favicon to normal browser GET requests.
+    """
     try:
         req = urllib.request.Request(
             f'https://{domain}/favicon.ico',
-            method='HEAD',
+            method='GET',
             headers={'User-Agent': 'Mozilla/5.0 HelmHub/1.0'},
         )
         with urllib.request.urlopen(req, timeout=2) as resp:
             return resp.status < 400
-    except Exception:
+    except urllib.error.HTTPError:
+        # Site explicitly rejected favicon request.
         return False
+    except Exception:
+        # Network/proxy/transient errors should not force a fallback provider;
+        # let the browser attempt the direct favicon URL itself.
+        return True
 
 
 # ---------------------------------------------------------------------------

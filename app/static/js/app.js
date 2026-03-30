@@ -188,6 +188,8 @@
 
   const QuickCapture = {
     overlay: null,
+    _viewportHandler: null,
+    _boundViewportEvents: false,
 
     getPreferredType() {
       const path = window.location.pathname || '';
@@ -213,12 +215,48 @@
           if (e.target === this.overlay) this.close();
         });
       }
+
+      this.bindViewportEvents();
+    },
+
+    bindViewportEvents() {
+      if (this._boundViewportEvents) return;
+
+      this._viewportHandler = () => this.syncViewportPosition();
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', this._viewportHandler);
+        window.visualViewport.addEventListener('scroll', this._viewportHandler);
+      }
+      window.addEventListener('orientationchange', this._viewportHandler);
+      window.addEventListener('resize', this._viewportHandler);
+      this._boundViewportEvents = true;
+    },
+
+    syncViewportPosition() {
+      if (!this.overlay || this.overlay.hidden) return;
+
+      const vv = window.visualViewport;
+      const viewportHeight = vv ? vv.height : window.innerHeight;
+      const viewportOffsetTop = vv ? vv.offsetTop : 0;
+      const minimumVisibleHeight = 320;
+      const computedHeight = Math.max(minimumVisibleHeight, Math.floor(viewportHeight - 8));
+
+      this.overlay.style.setProperty('--quick-capture-top-pad', `${Math.max(0, Math.floor(viewportOffsetTop))}px`);
+      this.overlay.style.setProperty('--quick-capture-height', `${computedHeight}px`);
+    },
+
+    resetViewportPosition() {
+      if (!this.overlay) return;
+      this.overlay.style.removeProperty('--quick-capture-top-pad');
+      this.overlay.style.removeProperty('--quick-capture-height');
     },
 
     open(type = 'task') {
       if (!this.overlay) return;
       this.overlay.hidden = false;
       body.classList.add('modal-open');
+      this.syncViewportPosition();
       this.switchTab(type);
       const input = this.overlay.querySelector('.tab-panel.active input:not([type="hidden"]), .tab-panel.active textarea');
       if (input) input.focus();
@@ -228,6 +266,7 @@
       if (!this.overlay) return;
       this.overlay.hidden = true;
       body.classList.remove('modal-open');
+      this.resetViewportPosition();
     },
 
     switchTab(type = 'task') {

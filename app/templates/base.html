@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HelmHub">
@@ -288,13 +288,29 @@
                   <option value="low">Low</option>
                   <option value="medium" selected>Medium</option>
                   <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
                 </select>
               </div>
               <div class="form-group">
                 <label for="qc-task-due" class="form-label">Due date</label>
                 <input type="date" id="qc-task-due" name="due_date" class="form-input">
               </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="qc-task-due-time" class="form-label">Due time (optional)</label>
+                <input type="time" id="qc-task-due-time" name="due_time" class="form-input">
+              </div>
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="pinned_to_today" id="qc-task-pinned" class="checkbox-input">
+                  <span class="checkbox-custom" aria-hidden="true"></span>
+                  <span class="checkbox-text">Pin to today</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="qc-task-description" class="form-label">Description (optional)</label>
+              <textarea id="qc-task-description" name="description" class="form-textarea" rows="3" placeholder="Any additional details..."></textarea>
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add Task</button>
@@ -319,6 +335,13 @@
               <label for="qc-note-tag" class="form-label">Tag (optional)</label>
               <input type="text" id="qc-note-tag" name="tag" class="form-input" placeholder="e.g. work, personal..." autocomplete="off">
             </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="pinned" id="qc-note-pinned" class="checkbox-input">
+                <span class="checkbox-custom" aria-hidden="true"></span>
+                <span class="checkbox-text">Pin this note</span>
+              </label>
+            </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save Note</button>
             </div>
@@ -337,6 +360,10 @@
             <div class="form-group">
               <label for="qc-reminder-at" class="form-label">When</label>
               <input type="datetime-local" id="qc-reminder-at" name="remind_at" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label for="qc-reminder-notes" class="form-label">Notes (optional)</label>
+              <textarea id="qc-reminder-notes" name="notes" class="form-textarea" rows="3" placeholder="Additional details..."></textarea>
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Set Reminder</button>
@@ -367,6 +394,10 @@
               <label for="qc-event-location" class="form-label">Location (optional)</label>
               <input type="text" id="qc-event-location" name="location" class="form-input" placeholder="Where?" autocomplete="off">
             </div>
+            <div class="form-group">
+              <label for="qc-event-notes" class="form-label">Notes (optional)</label>
+              <textarea id="qc-event-notes" name="notes" class="form-textarea" rows="3" placeholder="Agenda, links, or details..."></textarea>
+            </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add Event</button>
             </div>
@@ -389,6 +420,17 @@
             <div class="form-group">
               <label for="qc-bookmark-category" class="form-label">Category (optional)</label>
               <input type="text" id="qc-bookmark-category" name="category" class="form-input" placeholder="e.g. docs, tools..." autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="qc-bookmark-description" class="form-label">Description (optional)</label>
+              <textarea id="qc-bookmark-description" name="description" class="form-textarea" rows="3" placeholder="Add a short note about this link..."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="pinned" id="qc-bookmark-pinned" class="checkbox-input">
+                <span class="checkbox-custom" aria-hidden="true"></span>
+                <span class="checkbox-text">Pin to dashboard</span>
+              </label>
             </div>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save Bookmark</button>

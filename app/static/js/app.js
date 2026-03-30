@@ -189,13 +189,22 @@
   const QuickCapture = {
     overlay: null,
 
+    getPreferredType() {
+      const path = window.location.pathname || '';
+      if (path.startsWith('/notes')) return 'note';
+      if (path.startsWith('/bookmarks')) return 'bookmark';
+      if (path.startsWith('/reminders')) return 'reminder';
+      if (path.startsWith('/events')) return 'event';
+      return 'task';
+    },
+
     init() {
       this.overlay = $('#quick-capture-overlay');
       const fab = $('#fab-btn, .fab');
       if (fab) {
         fab.addEventListener('click', (e) => {
           e.preventDefault();
-          this.open('task');
+          this.open(this.getPreferredType());
         });
       }
 
@@ -376,8 +385,13 @@
     });
   }
 
+  function initMobileNativeGuards() {
+    doc.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+    doc.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+  }
+
   function wireGlobalFunctions() {
-    window.openQuickCapture = (type) => QuickCapture.open(type || 'task');
+    window.openQuickCapture = (type) => QuickCapture.open(type || QuickCapture.getPreferredType());
     window.closeQuickCapture = () => QuickCapture.close();
   window.closeEntityFormModal = () => EntityFormModal.close();
     window.switchTab = (type) => QuickCapture.switchTab(type || 'task');
@@ -403,6 +417,7 @@
     setDatetimeDefaults();
     autoResizeTextareas();
     initKeyboardShortcuts();
+    initMobileNativeGuards();
 
     updateClock();
     updateGreeting();

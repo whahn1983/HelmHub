@@ -57,6 +57,14 @@ body {
 
 body.modal-open { overflow: hidden; }
 
+/* Prevent transition flash during initial theme setup */
+html.no-transition *,
+html.no-transition *::before,
+html.no-transition *::after {
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
 a { color: var(--accent-blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
 

@@ -731,6 +731,7 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
   gap: .65rem;
 }
 
+.pwa-banner[hidden] { display: none !important; }
 .pwa-banner-content { display: flex; align-items: center; gap: .55rem; color: var(--text-primary); }
 .pwa-banner-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 

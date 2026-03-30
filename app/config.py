@@ -52,7 +52,7 @@ class BaseConfig:
     # ------------------------------------------------------------------
     # Rate limiting (Flask-Limiter)
     # ------------------------------------------------------------------
-    RATELIMIT_DEFAULT: str = '200 per day'
+    RATELIMIT_DEFAULT: str = '200 per minute'
     RATELIMIT_STORAGE_URI: str = 'memory://'
     RATELIMIT_HEADERS_ENABLED: bool = True
 

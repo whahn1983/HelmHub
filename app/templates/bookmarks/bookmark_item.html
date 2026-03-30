@@ -10,10 +10,19 @@
   <div class="bookmark-card-content">
     <a href="{{ bookmark.url }}" target="_blank" rel="noopener noreferrer" class="bookmark-title-link" id="bookmark-title-{{ bookmark.id }}">
       <span class="bookmark-favicon" aria-hidden="true">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.25"/>
-          <path d="M7 1.5C5.5 3 4.5 5 4.5 7s1 4 2.5 5.5M7 1.5C8.5 3 9.5 5 9.5 7s-1 4-2.5 5.5M1.5 7h11" stroke="currentColor" stroke-width="1.25"/>
-        </svg>
+        {% if bookmark.favicon_url %}
+          <img src="{{ bookmark.favicon_url }}" width="16" height="16" alt="" loading="lazy"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='inline';">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style="display:none">
+            <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.25"/>
+            <path d="M7 1.5C5.5 3 4.5 5 4.5 7s1 4 2.5 5.5M7 1.5C8.5 3 9.5 5 9.5 7s-1 4-2.5 5.5M1.5 7h11" stroke="currentColor" stroke-width="1.25"/>
+          </svg>
+        {% else %}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.25"/>
+            <path d="M7 1.5C5.5 3 4.5 5 4.5 7s1 4 2.5 5.5M7 1.5C8.5 3 9.5 5 9.5 7s-1 4-2.5 5.5M1.5 7h11" stroke="currentColor" stroke-width="1.25"/>
+          </svg>
+        {% endif %}
       </span>
       {{ bookmark.title }}
       <svg class="bookmark-ext-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">

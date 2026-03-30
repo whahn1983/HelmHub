@@ -11,7 +11,7 @@ A self-hosted personal command center PWA for tasks, notes, reminders, events, b
 - **Notes** — write and organize notes with tags and pinning; includes quick scratchpad
 - **Reminders** — time-based alerts with snooze support
 - **Events** — calendar events with start/end times and location
-- **Bookmarks** — save, categorize, and pin URLs with optional descriptions; search across title, URL, and description; filter by category
+- **Bookmarks** — save, categorize, and pin URLs with optional descriptions; search across title, URL, and description; filter by category; import/export via Netscape bookmark HTML
 - **Focus Mode** — distraction-free view for deep work
 - **TOTP 2FA** — optional two-factor authentication with recovery codes
 - **PWA** — installable as a standalone app with offline support via service worker
@@ -204,6 +204,18 @@ All endpoints require an authenticated session. Responses are JSON.
   "due_at": "2025-01-15T17:00:00"
 }
 ```
+
+---
+
+### Bookmarks Import / Export
+
+HelmHub supports browser-compatible bookmark import and export using the Netscape bookmark HTML format (the same format exported by Chrome, Firefox, Edge, and many other browsers).
+
+- **Export**: From the Bookmarks page, click **Export** to download `helmhub-bookmarks.html`.
+- **Import**: Use the **Import** file picker on the Bookmarks page to upload an HTML bookmarks file.
+- **Upsert behavior**: Imports are matched by URL for your account; existing bookmarks are updated and new URLs are added.
+- **Safety checks**: Only safe absolute URLs (`http`, `https`, `ftp`) are imported; invalid or unsafe entries are skipped.
+- **File limits**: Import files must be valid UTF-8 HTML and 2 MB or smaller.
 
 ---
 

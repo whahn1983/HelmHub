@@ -81,11 +81,28 @@
 </div>
 
 <!-- Bookmarks Grid -->
-<div id="bookmarks-grid" class="bookmarks-grid" aria-live="polite" aria-label="Bookmarks">
+<div id="bookmarks-grid" aria-live="polite" aria-label="Bookmarks">
   {% if bookmarks %}
-    {% for bookmark in bookmarks %}
-      {% include 'bookmarks/bookmark_item.html' %}
-    {% endfor %}
+    {% if show_grouped %}
+      {% for cat_label, cat_bookmarks in grouped_bookmarks %}
+        <div class="bookmark-category-group">
+          <h3 class="bookmark-group-heading">
+            {% if cat_label %}{{ cat_label | title }}{% else %}Uncategorized{% endif %}
+          </h3>
+          <div class="bookmarks-grid">
+            {% for bookmark in cat_bookmarks %}
+              {% include 'bookmarks/bookmark_item.html' %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="bookmarks-grid">
+        {% for bookmark in bookmarks %}
+          {% include 'bookmarks/bookmark_item.html' %}
+        {% endfor %}
+      </div>
+    {% endif %}
   {% else %}
     <div class="empty-state">
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">

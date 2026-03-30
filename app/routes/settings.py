@@ -181,9 +181,9 @@ def totp_enable():
 
     return render_template(
         'settings/totp_setup.html',
-        secret=secret,
+        secret_key=secret,
         uri=uri,
-        qr_b64=qr_b64,
+        qr_code_b64=qr_b64,
     )
 
 

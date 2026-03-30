@@ -13,8 +13,10 @@ Tests for HelmHub bookmark management routes and model:
 
 import pytest
 from io import BytesIO
+from urllib.error import HTTPError, URLError
 
 from app.models import Bookmark
+from app.routes.bookmarks import _probe_direct_favicon
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +119,30 @@ class TestBookmarkModel:
         assert 'My Link' in r
         assert 'tech' in r
         assert 'pinned=False' in r
+
+
+class TestBookmarkFaviconHelpers:
+    def test_probe_direct_favicon_returns_false_on_http_error(self, monkeypatch):
+        """HTTP errors should treat direct favicon discovery as unavailable."""
+        def _raise_http_error(*_args, **_kwargs):
+            raise HTTPError(
+                url='https://example.com/favicon.ico',
+                code=404,
+                msg='not found',
+                hdrs=None,
+                fp=None,
+            )
+
+        monkeypatch.setattr('urllib.request.urlopen', _raise_http_error)
+        assert _probe_direct_favicon('example.com') is False
+
+    def test_probe_direct_favicon_returns_true_on_network_error(self, monkeypatch):
+        """Network/proxy failures should still prefer direct browser fetches."""
+        def _raise_network_error(*_args, **_kwargs):
+            raise URLError('proxy blocked')
+
+        monkeypatch.setattr('urllib.request.urlopen', _raise_network_error)
+        assert _probe_direct_favicon('example.com') is True
 
 
 # ---------------------------------------------------------------------------

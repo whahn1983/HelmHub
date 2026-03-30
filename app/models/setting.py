@@ -22,6 +22,7 @@ import json
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship
 
 from app.extensions import db
@@ -148,7 +149,15 @@ class Setting(db.Model):
             instance = cls(user_id=user_id)
             instance.set_dashboard_config(cls.DEFAULT_DASHBOARD_CONFIG)
             db.session.add(instance)
-            db.session.flush()   # assign PK without a full commit
+            try:
+                db.session.flush()   # assign PK without a full commit
+            except IntegrityError:
+                # Another transaction may have inserted the per-user row
+                # after our initial SELECT and before this flush.
+                db.session.rollback()
+                instance = cls.query.filter_by(user_id=user_id).first()
+                if instance is None:
+                    raise
         return instance
 
     # ------------------------------------------------------------------

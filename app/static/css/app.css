@@ -1000,6 +1000,8 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
 
   .main-content {
     margin-left: calc(var(--sidebar-width) + env(safe-area-inset-left));
+    width: calc(100% - var(--sidebar-width) - env(safe-area-inset-left));
+    max-width: calc(100% - var(--sidebar-width) - env(safe-area-inset-left));
     padding: 1.2rem;
   }
 
@@ -1634,5 +1636,24 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
 }
 
 @media (max-width: 479px) {
-  .weather-widget { display: none; }
+  .dashboard-header {
+    align-items: flex-start;
+    gap: .55rem;
+  }
+
+  .weather-widget {
+    gap: .45rem;
+    margin-left: auto;
+  }
+
+  .weather-state { gap: .4rem; }
+
+  .weather-icon-wrap .weather-svg,
+  .weather-noloc-svg {
+    width: 36px;
+    height: 36px;
+  }
+
+  .weather-temp { font-size: 1.15rem; }
+  .weather-desc { font-size: .72rem; }
 }

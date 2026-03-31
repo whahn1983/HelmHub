@@ -3,7 +3,8 @@
 A self-hosted personal command center PWA for tasks, notes, reminders, events, bookmarks, and daily focus. Built with Flask, HTMX, PostgreSQL, and Docker.
 
 
-<img width="2239" height="1226" alt="screenshot" src="https://github.com/user-attachments/assets/d6c0b734-d1e9-4875-9d5f-374a68b2d660" />
+<img width="3838" height="1976" alt="image" src="https://github.com/user-attachments/assets/80165599-91c8-4a1b-87fe-a0ccab5291ff" />
+
 
 
 ---

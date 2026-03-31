@@ -323,7 +323,8 @@ def _register_security_headers(app: Flask) -> None:
         response.headers.setdefault(
             'Content-Security-Policy',
             "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
+            "script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.open-meteo.com; "
+            "object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'self'",
         )
         if request_is_secure():

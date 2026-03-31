@@ -986,10 +986,16 @@ code.used { text-decoration: line-through; color: var(--text-muted); }
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     z-index: 80;
   }
 
   .sidebar-header { padding: 1rem .9rem .6rem; border-bottom: 1px solid var(--border-color); }
+  .sidebar-nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
 
   .main-content {
     margin-left: var(--sidebar-width);

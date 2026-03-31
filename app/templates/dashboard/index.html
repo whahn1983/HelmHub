@@ -674,11 +674,13 @@
     setText('weather-temp', Math.round(tempF) + '\u00b0F');
     setText('weather-desc', info.label);
     hideEl('weather-loading');
+    hideEl('weather-no-location');
     showEl('weather-data');
   }
 
   function renderNoLocation() {
     hideEl('weather-loading');
+    hideEl('weather-data');
     showEl('weather-no-location');
   }
 
@@ -686,14 +688,19 @@
     var url = 'https://api.open-meteo.com/v1/forecast'
       + '?latitude=' + lat
       + '&longitude=' + lon
-      + '&current=temperature_2m,weathercode'
+      + '&current=temperature_2m,weather_code'
       + '&temperature_unit=fahrenheit'
       + '&forecast_days=1';
     fetch(url)
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (data) {
-        var cur = data.current;
-        renderWeather(cur.temperature_2m, cur.weathercode);
+        var cur = data && data.current;
+        if (!cur || typeof cur.temperature_2m !== 'number') {
+          throw new Error('Missing current weather payload');
+        }
+        var weatherCode = cur.weather_code;
+        if (typeof weatherCode !== 'number') weatherCode = cur.weathercode;
+        renderWeather(cur.temperature_2m, weatherCode);
       })
       .catch(renderNoLocation);
   }

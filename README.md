@@ -16,6 +16,7 @@ A self-hosted personal command center PWA for tasks, notes, reminders, events, b
 - **Notes** — write and organize notes with tags and pinning; includes quick scratchpad
 - **Reminders** — time-based alerts with snooze support
 - **Events** — calendar events with start/end times and location
+- **Calendar Subscriptions** — subscribe to external ICS/iCal feeds; remote events are fetched server-side, cached with a configurable TTL, and merged into the Events page with a "Subscribed" badge
 - **Bookmarks** — save, categorize, and pin URLs with optional descriptions; search across title, URL, and description; filter by category; import/export via Netscape bookmark HTML
 - **Focus Mode** — distraction-free view for deep work
 - **TOTP 2FA** — optional two-factor authentication with recovery codes
@@ -125,6 +126,10 @@ All configuration is done via environment variables. Copy `.env.example` to `.en
 | `SESSION_COOKIE_SECURE` | Restrict session cookies to HTTPS | `True` |
 | `PROXY_FIX_X_FOR` | Trusted `X-Forwarded-For` proxy hop count | `0` |
 | `PROXY_FIX_X_PROTO` | Trusted `X-Forwarded-Proto` proxy hop count | `0` |
+| `CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES` | How long fetched ICS feeds are cached before re-fetching | `30` |
+| `CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS` | HTTP request timeout when fetching a remote ICS feed | `120` |
+| `CALENDAR_SUBSCRIPTION_MAX_EVENTS` | Maximum number of events imported from a single feed | `500` |
+| `CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS` | How many days ahead to include events from subscribed feeds | `60` |
 
 **For production deployments**, always set:
 - A long, random `SECRET_KEY`
@@ -142,7 +147,7 @@ helmhub/
 │   ├── __init__.py          # Application factory (create_app)
 │   ├── config.py            # Config classes (Dev / Prod / Test)
 │   ├── extensions.py        # Flask extension instances
-│   ├── models/              # SQLAlchemy models (user, task, note, reminder, event, bookmark, setting)
+│   ├── models/              # SQLAlchemy models (user, task, note, reminder, event, bookmark, setting, calendar_subscription)
 │   ├── routes/              # Flask blueprints per feature
 │   │   ├── api.py           # JSON REST API
 │   │   ├── auth.py          # Login, TOTP, logout
@@ -152,9 +157,10 @@ helmhub/
 │   │   ├── reminders.py
 │   │   ├── events.py
 │   │   ├── bookmarks.py
+│   │   ├── calendar_subscriptions.py
 │   │   ├── focus.py
 │   │   └── settings.py
-│   ├── services/            # Auth and TOTP helpers
+│   ├── services/            # Auth, TOTP, and calendar subscription helpers
 │   ├── static/              # CSS, JS, service worker, PWA manifest, icons
 │   └── templates/           # Jinja2 HTML templates
 ├── migrations/              # Alembic migration versions
@@ -212,6 +218,19 @@ All endpoints require an authenticated session. Responses are JSON.
 
 ---
 
+### Calendar Subscriptions
+
+HelmHub can subscribe to external ICS/iCal calendar feeds and merge their events into the Events page alongside your local events.
+
+- **Add a subscription**: Go to **Settings → Calendar Subscriptions** and enter a name and the ICS feed URL.
+- **Event display**: Subscribed events appear on the Events page with a **Subscribed** badge and cannot be edited or deleted from within HelmHub.
+- **Server-side fetch**: Feeds are fetched by the server (not the browser), so private feeds behind authentication are supported via the URL.
+- **TTL cache**: Fetched feeds are cached in memory for `CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES` (default 30 minutes). Stale cached data is served if a re-fetch fails, preventing disruption from temporary outages.
+- **Lookahead window**: Only events within `CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS` (default 60 days) from today are imported per feed.
+- **Event cap**: At most `CALENDAR_SUBSCRIPTION_MAX_EVENTS` (default 500) events are imported per feed to guard against oversized feeds.
+
+---
+
 ### Bookmarks Import / Export
 
 HelmHub supports browser-compatible bookmark import and export using the Netscape bookmark HTML format (the same format exported by Chrome, Firefox, Edge, and many other browsers).
@@ -263,6 +282,7 @@ Tests use an in-memory SQLite database with CSRF and rate limiting disabled. No 
 | Tasks | `tests/test_tasks.py` | CRUD, completion toggle, pin, filtering |
 | Notes | `tests/test_notes.py` | CRUD, pin, search, scratchpad |
 | Bookmarks | `tests/test_bookmarks.py` | Model properties, CRUD, pin toggle, search/filter, HTMX responses |
+| Calendar Subscriptions | `tests/test_calendar_subscriptions.py` | CRUD routes, ICS fetch/parse, TTL cache, event merge, access control |
 
 ---
 

@@ -181,11 +181,17 @@ class Setting(db.Model):
             instance.set_dashboard_config(cls.DEFAULT_DASHBOARD_CONFIG)
             db.session.add(instance)
             try:
-                db.session.flush()   # assign PK without a full commit
+                # Keep recovery local to this insert attempt. A full
+                # ``session.rollback()`` inside request handling can expire
+                # unrelated ORM state (e.g. ``current_user``), which then
+                # triggers extra lazy loads and noisy cascading failures.
+                with db.session.begin_nested():
+                    db.session.flush()   # assign PK without a full commit
             except IntegrityError:
                 # Another transaction (or a previously pending duplicate row)
                 # may have inserted the per-user row before this flush.
-                db.session.rollback()
+                if instance in db.session:
+                    db.session.expunge(instance)
                 with db.session.no_autoflush:
                     instance = cls._dedupe_for_user(user_id)
                 if instance is None:

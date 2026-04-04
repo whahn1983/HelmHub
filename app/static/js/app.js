@@ -345,6 +345,43 @@
         }
       }
     });
+
+    doc.addEventListener('htmx:afterSwap', (event) => {
+      localizeUtcDateTimes(event.target);
+    });
+  }
+
+  function localizeUtcDateTimes(root = doc) {
+    const nodes = $$('.js-local-datetime[data-utc]', root);
+    if (!nodes.length) return;
+
+    nodes.forEach((el) => {
+      const raw = el.getAttribute('data-utc');
+      if (!raw) return;
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) return;
+
+      const today = new Date();
+      const isToday =
+        parsed.getFullYear() === today.getFullYear() &&
+        parsed.getMonth() === today.getMonth() &&
+        parsed.getDate() === today.getDate();
+
+      const timeFmt = new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      const dateFmt = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+      });
+      const rendered = isToday
+        ? timeFmt.format(parsed)
+        : `${dateFmt.format(parsed)}, ${timeFmt.format(parsed)}`;
+
+      el.textContent = rendered;
+      el.title = parsed.toLocaleString();
+    });
   }
 
   let deferredPrompt = null;
@@ -466,6 +503,7 @@
     autoResizeTextareas();
     initKeyboardShortcuts();
     initMobileNativeGuards();
+    localizeUtcDateTimes();
 
     updateClock();
     updateGreeting();

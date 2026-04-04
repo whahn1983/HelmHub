@@ -8,19 +8,14 @@ Responsibilities
 ----------------
 - Fetch remote ICS feeds via HTTP (server-side only)
 - Parse ICS data into transient SubscriptionEvent objects
-- Cache parsed events in process memory with TTL
-- Serve stale cached data when refresh fails
+- Persist parsed subscription events in the database
+- Serve stale persisted data when refresh fails
 - Merge subscription events with local DB events for display
 
 Architecture notes
 ------------------
-The in-memory cache (``_cache``) is a plain dict guarded by a
-``threading.Lock`` so it is safe under threaded WSGI servers like
-Gunicorn with multiple threads.  The structure is intentionally simple
-and could be replaced by Redis with minimal changes to
-``_read_cache`` / ``_write_cache``.
-
-Remote event instances are NEVER written to the database.
+Remote feeds are fetched in background worker threads and written to the
+``subscription_events`` table.
 """
 
 import logging
@@ -33,16 +28,11 @@ from urllib.parse import urlparse
 import requests
 from flask import current_app
 
+from app.extensions import db
+from app.models.subscription_event import SubscriptionEvent as SubscriptionEventRow
+
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# In-process memory cache
-#
-# Structure: { subscription_id (int): CacheEntry }
-# ---------------------------------------------------------------------------
-
-_cache: dict[int, dict] = {}
-_cache_lock = threading.Lock()
 _refresh_inflight: set[int] = set()
 _refresh_inflight_lock = threading.Lock()
 
@@ -132,25 +122,65 @@ class SubscriptionEvent:
 
 
 # ---------------------------------------------------------------------------
-# Cache helpers
+# DB-backed storage helpers
 # ---------------------------------------------------------------------------
 
 def _read_cache(subscription_id: int) -> Optional[dict]:
-    """Return the cache entry for *subscription_id*, or None."""
-    with _cache_lock:
-        return _cache.get(subscription_id)
+    """Return persisted events + computed expiry metadata, or None."""
+    rows = (
+        SubscriptionEventRow.query
+        .filter_by(subscription_id=subscription_id)
+        .order_by(SubscriptionEventRow.start_at.asc())
+        .all()
+    )
+    if not rows:
+        return None
+
+    events = [_row_to_event(row) for row in rows]
+    fetched_at = rows[0].updated_at
+    ttl = _get_ttl_from_row(subscription_id)
+    expires_at = fetched_at + timedelta(minutes=ttl)
+    return {
+        'events': events,
+        'fetched_at': fetched_at,
+        'expires_at': expires_at,
+        'success': True,
+        'error': None,
+    }
 
 
 def _write_cache(subscription_id: int, entry: dict) -> None:
-    """Store *entry* under *subscription_id* in the cache."""
-    with _cache_lock:
-        _cache[subscription_id] = entry
+    """Persist an event list for a subscription."""
+    from app.models.calendar_subscription import CalendarSubscription
+
+    sub = db.session.get(CalendarSubscription, subscription_id)
+    if sub is None:
+        return
+
+    SubscriptionEventRow.query.filter_by(subscription_id=subscription_id).delete()
+    for ev in entry.get('events', []):
+        db.session.add(
+            SubscriptionEventRow(
+                subscription_id=subscription_id,
+                user_id=sub.user_id,
+                external_id=ev.id,
+                title=ev.title,
+                start_at=ev.start_at,
+                end_at=ev.end_at,
+                location=ev.location,
+                notes=ev.notes,
+                all_day=ev.all_day,
+                source_name=ev.source_name,
+                color=ev.color,
+            )
+        )
+    db.session.flush()
 
 
 def invalidate_cache(subscription_id: int) -> None:
-    """Remove a subscription's cached events (e.g. after URL change)."""
-    with _cache_lock:
-        _cache.pop(subscription_id, None)
+    """Delete persisted events for a subscription (e.g. after URL change)."""
+    SubscriptionEventRow.query.filter_by(subscription_id=subscription_id).delete()
+    db.session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +489,36 @@ def _get_ttl(subscription) -> int:
     )
 
 
+def _get_ttl_from_row(subscription_id: int) -> int:
+    """Lookup subscription row and return effective TTL in minutes."""
+    from app.models.calendar_subscription import CalendarSubscription
+
+    sub = db.session.get(CalendarSubscription, subscription_id)
+    if sub is None:
+        return current_app.config.get(
+            'CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES', _DEFAULT_TTL_MINUTES
+        )
+    return _get_ttl(sub)
+
+
+def _row_to_event(row: SubscriptionEventRow) -> SubscriptionEvent:
+    """Convert a persisted subscription event row to the view dataclass."""
+    return SubscriptionEvent(
+        id=row.external_id,
+        title=row.title,
+        start_at=row.start_at,
+        end_at=row.end_at,
+        location=row.location,
+        notes=row.notes,
+        source_type='subscription',
+        source_id=row.subscription_id,
+        source_name=row.source_name,
+        color=row.color,
+        all_day=row.all_day,
+        read_only=True,
+    )
+
+
 def _update_db_status(
     subscription_id: int, status: str, error_msg: Optional[str]
 ) -> None:
@@ -583,24 +643,24 @@ def get_cached_events_stale_ok(subscription) -> list[SubscriptionEvent]:
 
 def get_cached_events_or_refresh_on_miss(subscription) -> list[SubscriptionEvent]:
     """
-    Return cached events, but perform a synchronous refresh on cold miss.
+    Return cached events from DB without triggering a synchronous refresh.
 
-    This keeps latency low when cache data already exists, while ensuring a
-    newly started worker process can warm its in-memory cache immediately
-    without requiring an additional browser refresh.
+    Callers should schedule background refreshes when :func:`is_cache_stale`
+    is true.
     """
     entry = _read_cache(subscription.id)
     if entry is not None:
         return entry['events']
-    return refresh_subscription_events(subscription, force=True)
+    return []
 
 
 def is_cache_stale(subscription) -> bool:
-    """Return True when the subscription's cache is absent or expired."""
-    entry = _read_cache(subscription.id)
-    if entry is None:
+    """Return True when persisted events are absent or past refresh TTL."""
+    if subscription.last_refresh_at is None:
         return True
-    return entry['expires_at'] <= datetime.utcnow()
+    ttl = _get_ttl(subscription)
+    expires_at = subscription.last_refresh_at + timedelta(minutes=ttl)
+    return expires_at <= datetime.utcnow()
 
 
 def refresh_subscription_events_background(subscription_id: int, app) -> None:
@@ -707,9 +767,12 @@ def get_all_display_events_for_user(
     sub_events: list[SubscriptionEvent] = []
     subscriptions = get_user_calendar_subscriptions(user.id)
 
+    _app = current_app._get_current_object()
     for sub in subscriptions:
         try:
-            events = get_cached_subscription_events(sub)
+            events = get_cached_events_stale_ok(sub)
+            if is_cache_stale(sub):
+                refresh_subscription_events_background(sub.id, _app)
             for ev in events:
                 if start and ev.start_at and ev.start_at < start:
                     continue

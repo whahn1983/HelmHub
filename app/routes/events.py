@@ -148,7 +148,7 @@ def _merge_subscription_events(
     try:
         from app.services.calendar_subscriptions import (
             get_user_calendar_subscriptions,
-            get_cached_events_or_refresh_on_miss,
+            get_cached_events_stale_ok,
             is_cache_stale,
             refresh_subscription_events_background,
         )
@@ -161,7 +161,7 @@ def _merge_subscription_events(
 
         for sub in subscriptions:
             try:
-                events = get_cached_events_or_refresh_on_miss(sub)
+                events = get_cached_events_stale_ok(sub)
                 if is_cache_stale(sub):
                     refresh_subscription_events_background(
                         sub.id, current_app._get_current_object()

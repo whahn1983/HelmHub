@@ -51,7 +51,11 @@
             <div style="margin-top: var(--space-1); font-size: 0.8125rem; color: var(--text-muted);">
               {% if sub.last_refresh_at %}
                 Last refreshed:
-                <time datetime="{{ sub.last_refresh_at.isoformat() }}">
+                <time
+                  datetime="{{ sub.last_refresh_at.isoformat() }}"
+                  class="js-local-datetime"
+                  data-utc="{{ sub.last_refresh_at.isoformat() }}Z"
+                >
                   {{ sub.last_refresh_at | format_datetime }}
                 </time>
                 —

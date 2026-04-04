@@ -23,7 +23,6 @@ from app.extensions import db
 from app.models.calendar_subscription import CalendarSubscription
 from app.services.calendar_subscriptions import (
     invalidate_cache,
-    refresh_subscription_events,
     refresh_subscription_events_background,
     validate_subscription_url,
 )

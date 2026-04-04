@@ -11,7 +11,7 @@ from app.extensions import db
 from app.models import Task, Note, Reminder, Event, Bookmark, Setting
 from app.services.calendar_subscriptions import (
     get_user_calendar_subscriptions,
-    get_cached_events_stale_ok,
+    get_cached_events_or_refresh_on_miss,
     is_cache_stale,
     refresh_subscription_events_background,
 )
@@ -144,9 +144,10 @@ def index():
     sub_upcoming: list = []
     _app = current_app._get_current_object()
     for sub in get_user_calendar_subscriptions(current_user.id):
+        events = get_cached_events_or_refresh_on_miss(sub)
         if is_cache_stale(sub):
             refresh_subscription_events_background(sub.id, _app)
-        for ev in get_cached_events_stale_ok(sub):
+        for ev in events:
             if not ev.start_at:
                 continue
             if today_start <= ev.start_at < today_end:

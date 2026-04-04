@@ -669,6 +669,44 @@ class TestCacheBehaviour:
         svc.invalidate_cache(sub.id)
         assert svc._read_cache(sub.id) is None
 
+    def test_get_cached_events_or_refresh_on_miss_uses_cache(self, app):
+        """The warmup helper does not refresh when cache is already present."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=907)
+        cached_events = [MagicMock()]
+        now = datetime.utcnow()
+        svc._write_cache(sub.id, {
+            'events': cached_events,
+            'fetched_at': now,
+            'expires_at': now + timedelta(minutes=30),
+            'success': True,
+            'error': None,
+        })
+
+        with app.app_context():
+            with patch.object(svc, 'refresh_subscription_events') as mock_refresh:
+                result = svc.get_cached_events_or_refresh_on_miss(sub)
+                mock_refresh.assert_not_called()
+
+        assert result is cached_events
+        svc.invalidate_cache(sub.id)
+
+    def test_get_cached_events_or_refresh_on_miss_refreshes_on_cold_miss(self, app):
+        """The warmup helper refreshes synchronously when no cache entry exists."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=908)
+        svc.invalidate_cache(sub.id)
+        with app.app_context():
+            with patch.object(
+                svc, 'refresh_subscription_events', return_value=['fresh']
+            ) as mock_refresh:
+                result = svc.get_cached_events_or_refresh_on_miss(sub)
+
+        mock_refresh.assert_called_once_with(sub, force=True)
+        assert result == ['fresh']
+
 
 # ===========================================================================
 # Service: get_all_display_events_for_user — merge behaviour
@@ -757,7 +795,7 @@ class TestEventsPageWithSubscriptions:
         )
         with patch.object(svc, 'get_user_calendar_subscriptions',
                           return_value=[MagicMock(id=2)]):
-            with patch.object(svc, 'get_cached_events_stale_ok',
+            with patch.object(svc, 'get_cached_events_or_refresh_on_miss',
                               return_value=[sub_ev]), \
                  patch.object(svc, 'is_cache_stale', return_value=False):
                 resp = auth_client.get('/events/?view=upcoming')

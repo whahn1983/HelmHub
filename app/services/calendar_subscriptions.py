@@ -579,6 +579,20 @@ def get_cached_events_stale_ok(subscription) -> list[SubscriptionEvent]:
     return []
 
 
+def get_cached_events_or_refresh_on_miss(subscription) -> list[SubscriptionEvent]:
+    """
+    Return cached events, but perform a synchronous refresh on cold miss.
+
+    This keeps latency low when cache data already exists, while ensuring a
+    newly started worker process can warm its in-memory cache immediately
+    without requiring an additional browser refresh.
+    """
+    entry = _read_cache(subscription.id)
+    if entry is not None:
+        return entry['events']
+    return refresh_subscription_events(subscription, force=True)
+
+
 def is_cache_stale(subscription) -> bool:
     """Return True when the subscription's cache is absent or expired."""
     entry = _read_cache(subscription.id)

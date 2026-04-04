@@ -10,6 +10,7 @@ Tests for the HelmHub dashboard routes:
 """
 
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -192,6 +193,51 @@ class TestDashboardPage:
         response = auth_client.get('/')
         assert b'Other users secret task' not in response.data
         assert b'Other users secret reminder' not in response.data
+
+    def test_dashboard_marks_subscription_next_event_for_local_time_rendering(
+        self, auth_client, monkeypatch
+    ):
+        """Subscription next-event times include UTC metadata for client-side localisation."""
+        now = datetime.utcnow().replace(second=0, microsecond=0)
+        next_start = now + timedelta(hours=2)
+        next_end = now + timedelta(hours=3)
+        sub_event = SimpleNamespace(
+            id='sub_1_test',
+            title='Subscription Standup',
+            start_at=next_start,
+            end_at=next_end,
+            location='Room A',
+            notes=None,
+            source_type='subscription',
+            source_name='Engineering Feed',
+        )
+
+        monkeypatch.setattr(
+            'app.routes.dashboard.get_user_calendar_subscriptions',
+            lambda user_id: [SimpleNamespace(id=1)],
+        )
+        monkeypatch.setattr(
+            'app.routes.dashboard.get_cached_events_stale_ok',
+            lambda sub: [sub_event],
+        )
+        monkeypatch.setattr(
+            'app.routes.dashboard.is_cache_stale',
+            lambda sub: False,
+        )
+        monkeypatch.setattr(
+            'app.routes.dashboard.refresh_subscription_events_background',
+            lambda sub_id, app: None,
+        )
+
+        response = auth_client.get('/')
+        html = response.data.decode()
+        expected_start = next_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+        expected_end = next_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        assert response.status_code == 200
+        assert f'data-utc=\"{expected_start}\"' in html
+        assert f'data-utc=\"{expected_end}\"' in html
+        assert 'js-local-time' in html
 
     def test_dashboard_shows_overdue_count_when_overdue_tasks_exist(
         self, auth_client, db, test_user

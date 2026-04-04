@@ -1,0 +1,97 @@
+{#
+  partials/subscription_item.html
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Single calendar subscription row, rendered by the toggle route for
+  HTMX in-place update.  Mirrors the structure used in
+  calendar_subscriptions/index.html.
+#}
+<li class="item-card" id="sub-{{ subscription.id }}" style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4);">
+
+  <!-- Color swatch -->
+  <div
+    style="width: 12px; height: 12px; border-radius: 50%; background: {{ subscription.display_color }}; flex-shrink: 0; margin-top: 4px;"
+    aria-hidden="true"
+  ></div>
+
+  <!-- Details -->
+  <div style="flex: 1; min-width: 0;">
+    <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
+      <span class="item-title" style="font-weight: 600;">{{ subscription.name | e }}</span>
+      {% if subscription.enabled %}
+        <span class="badge badge-success badge-sm">Enabled</span>
+      {% else %}
+        <span class="badge badge-sm" style="opacity: 0.6;">Disabled</span>
+      {% endif %}
+    </div>
+
+    <div style="margin-top: var(--space-1); font-size: 0.8125rem; color: var(--text-muted);">
+      {% if subscription.last_refresh_at %}
+        Last refreshed:
+        <time datetime="{{ subscription.last_refresh_at.isoformat() }}">
+          {{ subscription.last_refresh_at | format_datetime }}
+        </time>
+        —
+        {% if subscription.last_refresh_status == 'ok' %}
+          <span style="color: var(--color-success);">OK</span>
+        {% else %}
+          <span style="color: var(--color-danger);">Error</span>
+        {% endif %}
+      {% else %}
+        <span>Never refreshed</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div style="display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0;">
+    <form method="post" action="/calendar-subscriptions/{{ subscription.id }}/refresh" style="display: inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-icon" title="Refresh feed" aria-label="Refresh">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 8a6 6 0 0 1 10.47-4M14 8a6 6 0 0 1-10.47 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M12 4l.47-.47L14 2v3.5h-3.5L12 4z" fill="currentColor"/>
+          <path d="M4 12l-.47.47L2 14v-3.5h3.5L4 12z" fill="currentColor"/>
+        </svg>
+      </button>
+    </form>
+
+    <form method="post" action="/calendar-subscriptions/{{ subscription.id }}/toggle" style="display: inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button
+        type="submit"
+        class="btn-icon"
+        title="{{ 'Disable' if subscription.enabled else 'Enable' }}"
+        aria-label="{{ 'Disable' if subscription.enabled else 'Enable' }}"
+      >
+        {% if subscription.enabled %}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="1" y="5" width="14" height="6" rx="3" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="11" cy="8" r="2.5" fill="currentColor"/>
+          </svg>
+        {% else %}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="1" y="5" width="14" height="6" rx="3" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="5" cy="8" r="2.5" fill="currentColor" opacity="0.4"/>
+          </svg>
+        {% endif %}
+      </button>
+    </form>
+
+    <a href="/calendar-subscriptions/{{ subscription.id }}/edit" class="btn-icon" title="Edit" aria-label="Edit">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M11 2.5l2.5 2.5L5 13H2.5v-2.5L11 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+
+    <form method="post" action="/calendar-subscriptions/{{ subscription.id }}/delete" style="display: inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-icon btn-danger" title="Delete" aria-label="Delete"
+              onclick="return confirm('Delete this subscription?')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 5h10M6 5V3.5h4V5M6.5 7.5v4M9.5 7.5v4M4 5l.75 8.5h6.5L12 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+</li>

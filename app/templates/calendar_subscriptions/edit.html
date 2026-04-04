@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Subscription' if subscription else 'Add Subscription' }} — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">{{ 'Edit Subscription' if subscription else 'Add Subscription' }}</h1>
+</div>
+
+{#
+  form_values helper: when 'form' is passed as a dict (POST error re-render)
+  we read from it with .get(); when it is a CalendarSubscription object
+  (edit GET) we read its attributes.  When neither, use defaults.
+#}
+{% if form is mapping %}
+  {% set fv_name  = form.get('name', '') %}
+  {% set fv_url   = form.get('url', '') %}
+  {% set fv_color = form.get('color', '') %}
+  {% set fv_ttl   = form.get('cache_ttl_minutes', '') %}
+  {% set fv_enabled = form.get('enabled', 'on') != 'off' %}
+{% elif subscription %}
+  {% set fv_name  = subscription.name %}
+  {# URL intentionally left blank on GET — user must re-confirm to save #}
+  {% set fv_url   = '' %}
+  {% set fv_color = subscription.color or '' %}
+  {% set fv_ttl   = subscription.cache_ttl_minutes or '' %}
+  {% set fv_enabled = subscription.enabled %}
+{% else %}
+  {% set fv_name  = '' %}
+  {% set fv_url   = '' %}
+  {% set fv_color = '' %}
+  {% set fv_ttl   = '' %}
+  {% set fv_enabled = true %}
+{% endif %}
+
+<div class="card" style="max-width: 600px;">
+  <div class="card-body">
+    <form
+      method="post"
+      action="{{ '/calendar-subscriptions/' ~ subscription.id ~ '/edit' if subscription else '/calendar-subscriptions/new' }}"
+      novalidate
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      {% if errors %}
+        <div class="alert alert-danger" role="alert" style="margin-bottom: var(--space-4);">
+          <ul style="margin: 0; padding-left: 1.25rem;">
+            {% for error in errors %}
+              <li>{{ error | e }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <!-- Name -->
+      <div class="form-group">
+        <label for="sub-name" class="form-label">
+          Name <span aria-hidden="true" style="color: var(--color-danger);">*</span>
+        </label>
+        <input
+          type="text"
+          id="sub-name"
+          name="name"
+          class="form-control"
+          value="{{ fv_name | e }}"
+          placeholder="e.g. Work Calendar, Holidays"
+          maxlength="255"
+          required
+          autofocus
+        >
+      </div>
+
+      <!-- URL -->
+      <div class="form-group">
+        <label for="sub-url" class="form-label">
+          Subscription URL <span aria-hidden="true" style="color: var(--color-danger);">*</span>
+          {% if subscription %}
+            <span style="font-weight: normal; opacity: 0.65;">(leave blank to keep existing)</span>
+          {% endif %}
+        </label>
+        <input
+          type="url"
+          id="sub-url"
+          name="url"
+          class="form-control"
+          value="{{ fv_url | e }}"
+          placeholder="https://calendar.example.com/feed.ics"
+          {% if not subscription %}required{% endif %}
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <p class="form-hint">
+          Accepts <code>https://</code>, <code>http://</code>, and <code>webcal://</code> URLs.
+          The URL is stored server-side only and never sent to the browser.
+        </p>
+      </div>
+
+      <!-- Color -->
+      <div class="form-group">
+        <label for="sub-color" class="form-label">Accent colour (optional)</label>
+        <div style="display: flex; align-items: center; gap: var(--space-3);">
+          <input
+            type="color"
+            id="sub-color"
+            name="color"
+            class="form-control"
+            style="width: 56px; height: 40px; padding: 2px; cursor: pointer;"
+            value="{{ fv_color if fv_color else '#6366f1' }}"
+          >
+          <input
+            type="text"
+            id="sub-color-text"
+            class="form-control"
+            style="flex: 1;"
+            placeholder="#6366f1"
+            value="{{ fv_color | e }}"
+            maxlength="32"
+            aria-label="Hex colour value"
+          >
+        </div>
+        <p class="form-hint">Used as an accent colour on events from this feed.</p>
+      </div>
+
+      <!-- Cache TTL -->
+      <div class="form-group">
+        <label for="sub-ttl" class="form-label">Refresh interval (minutes, optional)</label>
+        <input
+          type="number"
+          id="sub-ttl"
+          name="cache_ttl_minutes"
+          class="form-control"
+          style="max-width: 160px;"
+          value="{{ fv_ttl | e }}"
+          placeholder="30"
+          min="1"
+          max="10080"
+        >
+        <p class="form-hint">
+          Leave blank to use the application default (30 min).
+          Range: 1 – 10 080 min (1 week).
+        </p>
+      </div>
+
+      <!-- Enabled -->
+      <div class="form-group">
+        <label class="form-label" style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+          <input
+            type="checkbox"
+            name="enabled"
+            value="on"
+            {% if fv_enabled %}checked{% endif %}
+            style="width: 16px; height: 16px;"
+          >
+          Enabled
+        </label>
+        <p class="form-hint">Disabled subscriptions are skipped when merging events.</p>
+      </div>
+
+      <!-- Submit -->
+      <div style="display: flex; gap: var(--space-3); align-items: center; margin-top: var(--space-6);">
+        <button type="submit" class="btn btn-primary">
+          {{ 'Save Changes' if subscription else 'Add Subscription' }}
+        </button>
+        <a href="/calendar-subscriptions/" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  /* Keep the colour picker and hex text input in sync */
+  (function () {
+    var picker = document.getElementById('sub-color');
+    var text   = document.getElementById('sub-color-text');
+    if (!picker || !text) return;
+
+    picker.addEventListener('input', function () {
+      text.value = picker.value;
+    });
+
+    text.addEventListener('input', function () {
+      var val = text.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+        picker.value = val;
+      }
+    });
+
+    picker.closest('form').addEventListener('submit', function () {
+      if (text.value.trim()) {
+        picker.value = text.value.trim();
+      }
+    });
+  })();
+</script>
+{% endblock %}

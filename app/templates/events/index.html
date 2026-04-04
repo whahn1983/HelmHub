@@ -46,10 +46,17 @@
         </h2>
         <ul class="events-day-list" role="list">
           {% for event in day_events %}
-            <li class="event-item {% if event.is_now %}event-now{% endif %}" id="event-{{ event.id }}">
+            {% set is_sub = event.source_type == 'subscription' if event.source_type is defined else false %}
+            <li
+              class="event-item {% if event.is_now %}event-now{% endif %} {% if is_sub %}event-item--subscription{% endif %}"
+              id="event-{{ event.id }}"
+              {% if is_sub and event.color %}style="border-left: 3px solid {{ event.color | e }}"{% endif %}
+            >
               <!-- Time block -->
               <div class="event-time-block" aria-label="Event time">
-                {% if event.start_at %}
+                {% if event.is_all_day %}
+                  <span class="event-time-allday">All day</span>
+                {% elif event.start_at %}
                   <span class="event-time-start">{{ event.start_at | format_time }}</span>
                   {% if event.end_at %}
                     <span class="event-time-divider" aria-hidden="true">—</span>
@@ -63,7 +70,14 @@
               <!-- Event details -->
               <div class="event-details">
                 <div class="event-header-row">
-                  <span class="event-title">{{ event.title }}</span>
+                  <span class="event-title">{{ event.title | e }}</span>
+                  {% if is_sub %}
+                    <span
+                      class="badge badge-sm"
+                      style="opacity: 0.7; font-size: 0.7rem;"
+                      title="From subscription: {{ event.source_name | e }}"
+                    >Subscribed</span>
+                  {% endif %}
                   {% if event.is_now %}
                     <span class="badge badge-success badge-sm">Now</span>
                   {% endif %}
@@ -74,7 +88,7 @@
                       <path d="M6.5 1.5C4.57 1.5 3 3.07 3 5c0 2.625 3.5 6.5 3.5 6.5S10 7.625 10 5c0-1.93-1.57-3.5-3.5-3.5z" stroke="currentColor" stroke-width="1.25"/>
                       <circle cx="6.5" cy="5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
                     </svg>
-                    {{ event.location }}
+                    {{ event.location | e }}
                   </span>
                 {% endif %}
                 {% if event.notes %}
@@ -82,40 +96,51 @@
                 {% endif %}
               </div>
 
-              <!-- Actions -->
-              <div class="event-actions">
-                <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit event" title="Edit">
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                    <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </a>
-                <button
-                  hx-post="/events/{{ event.id }}/delete"
-                  hx-target="#event-{{ event.id }}"
-                  hx-swap="outerHTML"
-                  hx-confirm="Delete this event?"
-                  hx-include="[name=csrf_token]"
-                  class="btn-icon btn-danger"
-                  aria-label="Delete event"
-                  title="Delete"
-                >
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                    <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-              </div>
+              <!-- Actions: only for local (writable) events -->
+              {% if not is_sub %}
+                <div class="event-actions">
+                  <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit event" title="Edit">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </a>
+                  <button
+                    hx-post="/events/{{ event.id }}/delete"
+                    hx-target="#event-{{ event.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this event?"
+                    hx-include="[name=csrf_token]"
+                    class="btn-icon btn-danger"
+                    aria-label="Delete event"
+                    title="Delete"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              {% endif %}
+
             </li>
           {% endfor %}
         </ul>
       </section>
     {% endfor %}
+
   {% elif events %}
-    <!-- Flat list fallback if not grouped -->
+    <!-- Flat list fallback -->
     <ul class="events-day-list" role="list">
       {% for event in events %}
-        <li class="event-item {% if event.is_now %}event-now{% endif %}" id="event-{{ event.id }}">
+        {% set is_sub = event.source_type == 'subscription' if event.source_type is defined else false %}
+        <li
+          class="event-item {% if event.is_now %}event-now{% endif %} {% if is_sub %}event-item--subscription{% endif %}"
+          id="event-{{ event.id }}"
+          {% if is_sub and event.color %}style="border-left: 3px solid {{ event.color | e }}"{% endif %}
+        >
           <div class="event-time-block">
-            {% if event.start_at %}
+            {% if event.is_all_day %}
+              <span class="event-time-allday">All day</span>
+            {% elif event.start_at %}
               <span class="event-time-start">{{ event.start_at | format_datetime }}</span>
               {% if event.end_at %}
                 <span class="event-time-divider" aria-hidden="true">—</span>
@@ -126,40 +151,49 @@
             {% endif %}
           </div>
           <div class="event-details">
-            <span class="event-title">{{ event.title }}</span>
+            <div class="event-header-row">
+              <span class="event-title">{{ event.title | e }}</span>
+              {% if is_sub %}
+                <span class="badge badge-sm" style="opacity: 0.7; font-size: 0.7rem;"
+                      title="{{ event.source_name | e }}">Subscribed</span>
+              {% endif %}
+            </div>
             {% if event.location %}
               <span class="event-location">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
                   <path d="M6.5 1.5C4.57 1.5 3 3.07 3 5c0 2.625 3.5 6.5 3.5 6.5S10 7.625 10 5c0-1.93-1.57-3.5-3.5-3.5z" stroke="currentColor" stroke-width="1.25"/>
                   <circle cx="6.5" cy="5" r="1.25" stroke="currentColor" stroke-width="1.25"/>
                 </svg>
-                {{ event.location }}
+                {{ event.location | e }}
               </span>
             {% endif %}
           </div>
-          <div class="event-actions">
-            <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </a>
-            <button
-              hx-post="/events/{{ event.id }}/delete"
-              hx-target="#event-{{ event.id }}"
-              hx-swap="outerHTML"
-              hx-confirm="Delete this event?"
-              hx-include="[name=csrf_token]"
-              class="btn-icon btn-danger"
-              aria-label="Delete"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
+          {% if not is_sub %}
+            <div class="event-actions">
+              <a href="/events/{{ event.id }}/edit" class="btn-icon" aria-label="Edit">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M12.5 3l2.5 2.5L6 14H3.5v-2.5L12.5 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+              <button
+                hx-post="/events/{{ event.id }}/delete"
+                hx-target="#event-{{ event.id }}"
+                hx-swap="outerHTML"
+                hx-confirm="Delete this event?"
+                hx-include="[name=csrf_token]"
+                class="btn-icon btn-danger"
+                aria-label="Delete"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M4 5.5h10M7 5.5V4h4v1.5M7.5 8.5v4M10.5 8.5v4M5 5.5l.75 9h6.5l.75-9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>
+
   {% else %}
     <div class="empty-state">
       <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">

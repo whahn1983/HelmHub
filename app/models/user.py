@@ -128,6 +128,14 @@ class User(UserMixin, db.Model):
         order_by='Bookmark.created_at.desc()',
     )
 
+    calendar_subscriptions = relationship(
+        'CalendarSubscription',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        lazy='dynamic',
+        order_by='CalendarSubscription.name.asc()',
+    )
+
     # ------------------------------------------------------------------
     # Password helpers
     # ------------------------------------------------------------------

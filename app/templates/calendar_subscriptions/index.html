@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Calendar Subscriptions — HelmHub{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Calendar Subscriptions</h1>
+  <a href="/calendar-subscriptions/new" class="btn btn-primary" aria-label="Add subscription">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    Add Subscription
+  </a>
+</div>
+
+<div class="settings-section card" style="margin-bottom: var(--space-4);">
+  <div class="card-body">
+    <p class="text-muted" style="margin: 0;">
+      Add external ICS/iCal calendar feeds here. Events from enabled subscriptions
+      will appear alongside your local events on the
+      <a href="/events">Events</a> page and are read-only.
+      Subscription URLs are never exposed in the browser.
+    </p>
+  </div>
+</div>
+
+{% if subscriptions %}
+  <div id="subscriptions-list">
+    <ul class="items-list" role="list" style="list-style: none; padding: 0; margin: 0;">
+      {% for sub in subscriptions %}
+        <li class="item-card" id="sub-{{ sub.id }}" style="display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4);">
+
+          <!-- Color swatch -->
+          <div
+            style="width: 12px; height: 12px; border-radius: 50%; background: {{ sub.display_color }}; flex-shrink: 0; margin-top: 4px;"
+            aria-hidden="true"
+          ></div>
+
+          <!-- Details -->
+          <div style="flex: 1; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
+              <span class="item-title" style="font-weight: 600;">{{ sub.name | e }}</span>
+              {% if sub.enabled %}
+                <span class="badge badge-success badge-sm">Enabled</span>
+              {% else %}
+                <span class="badge badge-sm" style="opacity: 0.6;">Disabled</span>
+              {% endif %}
+            </div>
+
+            <!-- Status row -->
+            <div style="margin-top: var(--space-1); font-size: 0.8125rem; color: var(--text-muted);">
+              {% if sub.last_refresh_at %}
+                Last refreshed:
+                <time datetime="{{ sub.last_refresh_at.isoformat() }}">
+                  {{ sub.last_refresh_at | format_datetime }}
+                </time>
+                —
+                {% if sub.last_refresh_status == 'ok' %}
+                  <span style="color: var(--color-success);">OK</span>
+                {% else %}
+                  <span style="color: var(--color-danger);" title="{{ sub.last_error | e if sub.last_error else '' }}">Error</span>
+                {% endif %}
+              {% else %}
+                <span>Never refreshed</span>
+              {% endif %}
+              {% if sub.cache_ttl_minutes %}
+                · TTL: {{ sub.cache_ttl_minutes }} min
+              {% endif %}
+            </div>
+
+            {% if sub.last_refresh_status == 'error' and sub.last_error %}
+              <div
+                class="form-hint"
+                style="margin-top: var(--space-1); color: var(--color-danger); font-size: 0.8125rem;"
+                role="alert"
+              >
+                {{ sub.last_error | truncate(120) | e }}
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Actions -->
+          <div style="display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0;">
+            <!-- Refresh -->
+            <form method="post" action="/calendar-subscriptions/{{ sub.id }}/refresh" style="display: inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button
+                type="submit"
+                class="btn-icon"
+                aria-label="Refresh {{ sub.name | e }}"
+                title="Refresh feed"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M2 8a6 6 0 0 1 10.47-4M14 8a6 6 0 0 1-10.47 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <path d="M12 4l.47-.47L14 2v3.5h-3.5L12 4z" fill="currentColor"/>
+                  <path d="M4 12l-.47.47L2 14v-3.5h3.5L4 12z" fill="currentColor"/>
+                </svg>
+              </button>
+            </form>
+
+            <!-- Toggle enabled/disabled -->
+            <form method="post" action="/calendar-subscriptions/{{ sub.id }}/toggle" style="display: inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button
+                type="submit"
+                class="btn-icon"
+                aria-label="{{ 'Disable' if sub.enabled else 'Enable' }} {{ sub.name | e }}"
+                title="{{ 'Disable' if sub.enabled else 'Enable' }}"
+              >
+                {% if sub.enabled %}
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="5" width="14" height="6" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="11" cy="8" r="2.5" fill="currentColor"/>
+                  </svg>
+                {% else %}
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <rect x="1" y="5" width="14" height="6" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="5" cy="8" r="2.5" fill="currentColor" opacity="0.4"/>
+                  </svg>
+                {% endif %}
+              </button>
+            </form>
+
+            <!-- Edit -->
+            <a
+              href="/calendar-subscriptions/{{ sub.id }}/edit"
+              class="btn-icon"
+              aria-label="Edit {{ sub.name | e }}"
+              title="Edit"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M11 2.5l2.5 2.5L5 13H2.5v-2.5L11 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+
+            <!-- Delete -->
+            <form method="post" action="/calendar-subscriptions/{{ sub.id }}/delete" style="display: inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button
+                type="submit"
+                class="btn-icon btn-danger"
+                aria-label="Delete {{ sub.name | e }}"
+                title="Delete"
+                onclick="return confirm('Delete subscription \u201c{{ sub.name | e }}\u201d? This cannot be undone.')"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 5h10M6 5V3.5h4V5M6.5 7.5v4M9.5 7.5v4M4 5l.75 8.5h6.5L12 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </form>
+          </div>
+
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+{% else %}
+  <div class="empty-state">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <rect x="6" y="8" width="36" height="34" rx="4" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+      <path d="M16 4v8M32 4v8M6 20h36" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+      <path d="M24 28v-6M24 32v-1" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+    </svg>
+    <p class="empty-state-title">No calendar subscriptions yet</p>
+    <p class="empty-state-body">
+      Subscribe to external ICS/iCal feeds (e.g. Google Calendar, iCloud, Outlook)
+      to see their events alongside your local events.
+    </p>
+    <a href="/calendar-subscriptions/new" class="btn btn-primary">Add a Subscription</a>
+  </div>
+{% endif %}
+
+<!-- Back to settings -->
+<div style="margin-top: var(--space-6);">
+  <a href="/settings/" class="btn btn-ghost">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Back to Settings
+  </a>
+</div>
+{% endblock %}

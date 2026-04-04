@@ -66,6 +66,26 @@ class BaseConfig:
     PROXY_FIX_X_PREFIX: int = int(os.environ.get('PROXY_FIX_X_PREFIX', '0'))
 
     # ------------------------------------------------------------------
+    # Calendar subscriptions (ICS/iCal feeds)
+    # ------------------------------------------------------------------
+    # Default cache TTL for subscription event feeds (minutes)
+    CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES: int = int(
+        os.environ.get('CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES', '30')
+    )
+    # HTTP request timeout when fetching a remote ICS feed (seconds)
+    CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS: int = int(
+        os.environ.get('CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', '15')
+    )
+    # Maximum number of events to keep per subscription after parsing
+    CALENDAR_SUBSCRIPTION_MAX_EVENTS: int = int(
+        os.environ.get('CALENDAR_SUBSCRIPTION_MAX_EVENTS', '500')
+    )
+    # How many days ahead to expand recurring events
+    CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS: int = int(
+        os.environ.get('CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS', '60')
+    )
+
+    # ------------------------------------------------------------------
     # Application metadata
     # ------------------------------------------------------------------
     APP_NAME: str = 'HelmHub'

@@ -220,10 +220,10 @@
         {% set next_is_sub = next_event.source_type is defined and next_event.source_type == 'subscription' %}
         <div class="event-item event-item-featured">
           <div class="event-time-block">
-            <span class="event-time-start">{{ next_event.start_at | format_time }}</span>
+            <span class="event-time-start js-local-time" data-utc="{{ next_event.start_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ next_event.start_at | format_time }}</span>
             {% if next_event.end_at %}
               <span class="event-time-sep">—</span>
-              <span class="event-time-end">{{ next_event.end_at | format_time }}</span>
+              <span class="event-time-end js-local-time" data-utc="{{ next_event.end_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ next_event.end_at | format_time }}</span>
             {% endif %}
           </div>
           <div class="event-details">
@@ -264,7 +264,7 @@
           <ul class="events-today-list">
             {% for event in other_today %}
               <li class="event-item">
-                <span class="event-time-start">{{ event.start_at | format_time }}</span>
+                <span class="event-time-start js-local-time" data-utc="{{ event.start_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ event.start_at | format_time }}</span>
                 <span class="event-title">{{ event.title }}</span>
               </li>
             {% endfor %}
@@ -274,7 +274,7 @@
         <ul class="events-today-list">
           {% for event in today_events %}
             <li class="event-item">
-              <span class="event-time-start">{{ event.start_at | format_time }}</span>
+              <span class="event-time-start js-local-time" data-utc="{{ event.start_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ event.start_at | format_time }}</span>
               <span class="event-title">{{ event.title }}</span>
             </li>
           {% endfor %}
@@ -519,6 +519,19 @@
   }
   updateClock();
   setInterval(updateClock, 10000);
+
+  // Render UTC-backed event times in the browser's local timezone.
+  function toLocalTime(el) {
+    var isoUtc = el.getAttribute('data-utc');
+    if (!isoUtc) return;
+    var date = new Date(isoUtc);
+    if (isNaN(date.getTime())) return;
+    el.textContent = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit'
+    }).format(date);
+  }
+  document.querySelectorAll('.js-local-time[data-utc]').forEach(toLocalTime);
 
   // Greeting based on time
   function updateGreeting() {

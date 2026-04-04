@@ -217,6 +217,7 @@
     </div>
     <div class="card-body">
       {% if next_event %}
+        {% set next_is_sub = next_event.source_type is defined and next_event.source_type == 'subscription' %}
         <div class="event-item event-item-featured">
           <div class="event-time-block">
             <span class="event-time-start">{{ next_event.start_at | format_time }}</span>
@@ -227,6 +228,16 @@
           </div>
           <div class="event-details">
             <span class="event-title">{{ next_event.title }}</span>
+            {% if next_is_sub %}
+              <span class="event-source-label" title="From subscription: {{ next_event.source_name | e }}">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
+                  <path d="M1 5.5C1 3.01 3.01 1 5.5 1S10 3.01 10 5.5 7.99 10 5.5 10 1 7.99 1 5.5z" stroke="currentColor" stroke-width="1.25"/>
+                  <path d="M3.5 5.5a2 2 0 104 0 2 2 0 00-4 0z" stroke="currentColor" stroke-width="1.25"/>
+                  <path d="M8.5 2.5L10 1M2.5 2.5L1 1M8.5 8.5l1.5 1.5M2.5 8.5L1 10" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+                </svg>
+                {{ next_event.source_name }}
+              </span>
+            {% endif %}
             {% if next_event.location %}
               <span class="event-location">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -240,11 +251,13 @@
               <p class="event-notes-preview">{{ next_event.notes | truncate(80) }}</p>
             {% endif %}
           </div>
-          <a href="/events/{{ next_event.id }}/edit" class="btn-icon" aria-label="Edit event">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </a>
+          {% if not next_is_sub %}
+            <a href="/events/{{ next_event.id }}/edit" class="btn-icon" aria-label="Edit event">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+          {% endif %}
         </div>
         {% set other_today = today_events | selectattr('id', '!=', next_event.id) | list %}
         {% if other_today %}

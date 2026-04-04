@@ -15,7 +15,7 @@ import logging
 
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    request, flash, abort, make_response,
+    request, flash, abort, make_response, current_app,
 )
 from flask_login import login_required, current_user
 
@@ -24,6 +24,7 @@ from app.models.calendar_subscription import CalendarSubscription
 from app.services.calendar_subscriptions import (
     invalidate_cache,
     refresh_subscription_events,
+    refresh_subscription_events_background,
     validate_subscription_url,
 )
 
@@ -251,21 +252,22 @@ def toggle(sub_id: int):
 @cal_subs_bp.route('/<int:sub_id>/refresh', methods=['POST'])
 @login_required
 def refresh(sub_id: int):
-    """Force a cache refresh for a subscription."""
+    """Trigger an asynchronous cache refresh for a subscription."""
     sub = _sub_or_404(sub_id)
 
     try:
-        events = refresh_subscription_events(sub, force=True)
-        db.session.refresh(sub)   # reload last_refresh_at / status from DB
+        refresh_subscription_events_background(
+            sub.id, current_app._get_current_object()
+        )
         flash(
-            f'Subscription \u201c{sub.name}\u201d refreshed — '
-            f'{len(events)} event(s) loaded.',
-            'success',
+            f'Refreshing \u201c{sub.name}\u201d in the background \u2014 '
+            'updated events will appear shortly.',
+            'info',
         )
     except Exception:
-        logger.exception('Manual refresh failed for subscription %s', sub_id)
+        logger.exception('Failed to start background refresh for subscription %s', sub_id)
         flash(
-            f'Could not refresh \u201c{sub.name}\u201d. Check the URL and try again.',
+            f'Could not start refresh for \u201c{sub.name}\u201d.',
             'danger',
         )
 

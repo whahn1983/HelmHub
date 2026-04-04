@@ -565,6 +565,58 @@ def get_cached_subscription_events(subscription) -> list[SubscriptionEvent]:
     return refresh_subscription_events(subscription, force=False)
 
 
+def get_cached_events_stale_ok(subscription) -> list[SubscriptionEvent]:
+    """
+    Return cached events without triggering a network request.
+
+    Returns the cached list even if it is stale (expired).  Returns an
+    empty list when no cache entry exists at all.  This is safe to call
+    from latency-sensitive paths such as the dashboard.
+    """
+    entry = _read_cache(subscription.id)
+    if entry is not None:
+        return entry['events']
+    return []
+
+
+def is_cache_stale(subscription) -> bool:
+    """Return True when the subscription's cache is absent or expired."""
+    entry = _read_cache(subscription.id)
+    if entry is None:
+        return True
+    return entry['expires_at'] <= datetime.utcnow()
+
+
+def refresh_subscription_events_background(subscription_id: int, app) -> None:
+    """
+    Spawn a daemon thread to refresh a subscription's cache.
+
+    The caller must pass the concrete Flask application object (not a
+    proxy), e.g.::
+
+        refresh_subscription_events_background(
+            sub.id, current_app._get_current_object()
+        )
+
+    The thread pushes its own application context so all Flask/SQLAlchemy
+    helpers work correctly outside the request lifecycle.
+    """
+    def _worker() -> None:
+        with app.app_context():
+            from app.models.calendar_subscription import CalendarSubscription  # noqa: PLC0415
+            from app.extensions import db  # noqa: PLC0415
+            sub = db.session.get(CalendarSubscription, subscription_id)
+            if sub:
+                refresh_subscription_events(sub, force=True)
+
+    thread = threading.Thread(
+        target=_worker,
+        daemon=True,
+        name=f'cal-refresh-{subscription_id}',
+    )
+    thread.start()
+
+
 # ---------------------------------------------------------------------------
 # Multi-subscription helpers
 # ---------------------------------------------------------------------------

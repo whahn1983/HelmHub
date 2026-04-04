@@ -462,6 +462,7 @@ p { margin: 0 0 .75rem; color: var(--text-secondary); }
 .reminder-meta,
 .note-date,
 .tag-badge { color: var(--text-secondary); font-size: .82rem; display: inline-flex; gap: .3rem; align-items: center; }
+.event-source-label { color: var(--text-secondary); font-size: .78rem; display: inline-flex; gap: .25rem; align-items: center; opacity: .8; }
 .event-notes-preview,
 .reminder-notes-preview,
 .task-notes-preview,

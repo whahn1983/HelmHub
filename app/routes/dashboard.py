@@ -4,11 +4,17 @@ Dashboard routes: the main landing page for authenticated users.
 
 from datetime import datetime, date, timedelta
 
-from flask import Blueprint, render_template, redirect, request, url_for
+from flask import Blueprint, render_template, redirect, request, url_for, current_app
 from flask_login import login_required, current_user
 
 from app.extensions import db
 from app.models import Task, Note, Reminder, Event, Bookmark, Setting
+from app.services.calendar_subscriptions import (
+    get_user_calendar_subscriptions,
+    get_cached_events_stale_ok,
+    is_cache_stale,
+    refresh_subscription_events_background,
+)
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/')
 
@@ -110,7 +116,7 @@ def index():
 
     # --- Events ---
 
-    today_events = (
+    db_today_events = (
         Event.query
         .filter(
             Event.user_id == current_user.id,
@@ -121,7 +127,7 @@ def index():
         .all()
     )
 
-    next_event = (
+    db_next_event = (
         Event.query
         .filter(
             Event.user_id == current_user.id,
@@ -130,6 +136,34 @@ def index():
         .order_by(Event.start_at.asc())
         .first()
     )
+
+    # Merge subscription events from cache (no blocking HTTP request).
+    # If a subscription's cache is stale, kick off a background refresh
+    # so the next dashboard load will have fresh data.
+    sub_today: list = []
+    sub_upcoming: list = []
+    _app = current_app._get_current_object()
+    for sub in get_user_calendar_subscriptions(current_user.id):
+        if is_cache_stale(sub):
+            refresh_subscription_events_background(sub.id, _app)
+        for ev in get_cached_events_stale_ok(sub):
+            if not ev.start_at:
+                continue
+            if today_start <= ev.start_at < today_end:
+                sub_today.append(ev)
+            if ev.start_at >= now:
+                sub_upcoming.append(ev)
+
+    today_events = sorted(
+        list(db_today_events) + sub_today,
+        key=lambda e: e.start_at,
+    )
+
+    _all_upcoming = sorted(
+        ([db_next_event] if db_next_event else []) + sub_upcoming,
+        key=lambda e: e.start_at,
+    )
+    next_event = _all_upcoming[0] if _all_upcoming else None
 
     # --- Notes ---
 

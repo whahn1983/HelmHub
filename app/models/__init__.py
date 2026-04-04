@@ -7,7 +7,7 @@ other tooling can discover every mapped table via a single import of this
 package.
 
 Import order respects foreign-key dependencies:
-  User  →  Task, Note, Reminder, Event, Setting
+  User  →  Task, Note, Reminder, Event, Setting, CalendarSubscription
 """
 
 from app.models.user import User
@@ -17,6 +17,7 @@ from app.models.reminder import Reminder
 from app.models.event import Event
 from app.models.setting import Setting
 from app.models.bookmark import Bookmark
+from app.models.calendar_subscription import CalendarSubscription
 
 __all__ = [
     'User',
@@ -26,4 +27,5 @@ __all__ = [
     'Event',
     'Setting',
     'Bookmark',
+    'CalendarSubscription',
 ]

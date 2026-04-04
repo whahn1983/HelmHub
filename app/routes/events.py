@@ -1,10 +1,16 @@
 """
-Events routes.
+app/routes/events.py
+~~~~~~~~~~~~~~~~~~~~~
 
-Handles CRUD for calendar events.
-Supports both full-page and HTMX partial responses.
+Routes for calendar events.
+
+Handles CRUD for local (DB-backed) events and merges read-only events
+from ICS subscription feeds for display.  Supports both full-page and
+HTMX partial responses.
 """
 
+import logging
+from collections import OrderedDict
 from datetime import datetime, date, timedelta
 
 from flask import (
@@ -17,6 +23,8 @@ from app.extensions import db
 from app.models import Event
 from app.services.auth_service import parse_datetime
 
+logger = logging.getLogger(__name__)
+
 events_bp = Blueprint('events', __name__, url_prefix='/events')
 
 
@@ -24,11 +32,11 @@ events_bp = Blueprint('events', __name__, url_prefix='/events')
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _is_htmx():
+def _is_htmx() -> bool:
     return request.headers.get('HX-Request') == 'true'
 
 
-def _event_or_404(event_id):
+def _event_or_404(event_id: int) -> Event:
     """Return the event owned by current user or abort 404."""
     event = db.session.get(Event, event_id)
     if event is None or event.user_id != current_user.id:
@@ -36,13 +44,13 @@ def _event_or_404(event_id):
     return event
 
 
-def _parse_event_form(form):
+def _parse_event_form(form) -> tuple[dict, list[str]]:
     """
     Parse and validate common event form fields.
 
-    Returns (data_dict, errors_list).
+    Returns ``(data_dict, errors_list)``.
     """
-    errors = []
+    errors: list[str] = []
 
     title = form.get('title', '').strip()
     if not title:
@@ -91,6 +99,87 @@ def _parse_event_form(form):
     return data, errors
 
 
+def _group_events_by_date(events: list) -> OrderedDict:
+    """
+    Group a sorted list of events into an OrderedDict keyed by
+    human-readable date label strings.
+
+    Accepts both :class:`~app.models.Event` ORM objects and
+    :class:`~app.services.calendar_subscriptions.SubscriptionEvent`
+    dataclass instances — both expose a ``start_at`` datetime attribute.
+    """
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+
+    groups: dict[date, list] = {}
+    for event in events:
+        event_date = event.start_at.date() if event.start_at else today
+        groups.setdefault(event_date, []).append(event)
+
+    result: OrderedDict = OrderedDict()
+    for event_date in sorted(groups.keys()):
+        if event_date == today:
+            label = 'Today'
+        elif event_date == tomorrow:
+            label = 'Tomorrow'
+        else:
+            label = event_date.strftime('%A, %b ') + str(event_date.day)
+        result[label] = groups[event_date]
+
+    return result
+
+
+def _merge_subscription_events(
+    db_events: list[Event],
+    view: str,
+    now: datetime,
+    today_start: datetime,
+    today_end: datetime,
+    week_end: datetime,
+) -> list:
+    """
+    Fetch subscription events, apply the same view filter as the DB
+    query, and return a merged time-sorted list.
+
+    Errors from the subscription service are caught and logged so they
+    never break the events page.
+    """
+    try:
+        from app.services.calendar_subscriptions import (
+            get_user_calendar_subscriptions,
+            get_cached_subscription_events,
+        )
+
+        subscriptions = get_user_calendar_subscriptions(current_user.id)
+        sub_events = []
+
+        for sub in subscriptions:
+            try:
+                events = get_cached_subscription_events(sub)
+                for ev in events:
+                    if ev.start_at is None:
+                        continue
+                    if view == 'today':
+                        if not (today_start <= ev.start_at < today_end):
+                            continue
+                    elif view == 'upcoming':
+                        if not (ev.start_at >= now and ev.start_at < week_end):
+                            continue
+                    sub_events.append(ev)
+            except Exception:
+                logger.exception(
+                    'Failed to get events for subscription %s', sub.id
+                )
+
+        merged = list(db_events) + sub_events
+        merged.sort(key=lambda e: e.start_at or datetime.min)
+        return merged
+
+    except Exception:
+        logger.exception('Subscription event merge failed; showing DB events only.')
+        return list(db_events)
+
+
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------
@@ -99,7 +188,7 @@ def _parse_event_form(form):
 @login_required
 def index():
     """
-    List events with optional view filter.
+    List events with optional view filter, merged with subscription events.
 
     Query params:
       view – today | upcoming | all (default: all)
@@ -125,18 +214,25 @@ def index():
         )
     # else 'all' — no additional filter
 
-    events = query.order_by(Event.start_at.asc()).all()
+    db_events = query.order_by(Event.start_at.asc()).all()
+
+    merged = _merge_subscription_events(
+        db_events, view, now, today_start, today_end, week_end
+    )
+    grouped_events = _group_events_by_date(merged)
 
     if _is_htmx():
         return render_template(
             'partials/events_list.html',
-            events=events,
+            events=merged,
+            grouped_events=grouped_events,
             view=view,
         )
 
     return render_template(
         'events/index.html',
-        events=events,
+        events=merged,
+        grouped_events=grouped_events,
         view=view,
     )
 
@@ -196,8 +292,8 @@ def new():
 
 @events_bp.route('/<int:event_id>/edit', methods=['GET', 'POST'])
 @login_required
-def edit(event_id):
-    """Edit an existing event."""
+def edit(event_id: int):
+    """Edit an existing local event."""
     event = _event_or_404(event_id)
 
     if request.method == 'POST':
@@ -249,8 +345,8 @@ def edit(event_id):
 
 @events_bp.route('/<int:event_id>/delete', methods=['POST'])
 @login_required
-def delete(event_id):
-    """Permanently delete an event."""
+def delete(event_id: int):
+    """Permanently delete a local event."""
     event = _event_or_404(event_id)
     db.session.delete(event)
     db.session.commit()

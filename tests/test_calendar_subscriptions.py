@@ -1,0 +1,776 @@
+"""
+tests/test_calendar_subscriptions.py
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tests for calendar subscription management routes, service layer cache
+behaviour, ICS parsing, and merged event display.
+
+Covered areas
+-------------
+- CRUD routes (create / edit / delete / toggle / refresh)
+- Authentication and ownership enforcement
+- URL validation
+- In-process cache: hit, miss, refresh, stale-on-error
+- ICS parsing: basic events, all-day events, recurring events, bad feeds
+- Merged event display on the events index
+"""
+
+import textwrap
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from app.models.calendar_subscription import CalendarSubscription
+
+
+# ---------------------------------------------------------------------------
+# Minimal well-formed ICS feed used across tests
+# ---------------------------------------------------------------------------
+
+_VALID_ICS = textwrap.dedent("""\
+    BEGIN:VCALENDAR
+    VERSION:2.0
+    PRODID:-//Test//Test//EN
+    BEGIN:VEVENT
+    UID:test-event-001@example.com
+    SUMMARY:Test Meeting
+    DTSTART:20990101T100000Z
+    DTEND:20990101T110000Z
+    LOCATION:Room A
+    DESCRIPTION:An important meeting.
+    END:VEVENT
+    END:VCALENDAR
+""").encode()
+
+_ALL_DAY_ICS = textwrap.dedent("""\
+    BEGIN:VCALENDAR
+    VERSION:2.0
+    PRODID:-//Test//Test//EN
+    BEGIN:VEVENT
+    UID:allday-001@example.com
+    SUMMARY:Company Holiday
+    DTSTART;VALUE=DATE:20990115
+    DTEND;VALUE=DATE:20990116
+    END:VEVENT
+    END:VCALENDAR
+""").encode()
+
+_RECURRING_ICS_TEMPLATE = textwrap.dedent("""\
+    BEGIN:VCALENDAR
+    VERSION:2.0
+    PRODID:-//Test//Test//EN
+    BEGIN:VEVENT
+    UID:recurring-001@example.com
+    SUMMARY:Weekly Standup
+    DTSTART:{dtstart}
+    DURATION:PT30M
+    RRULE:FREQ=WEEKLY;COUNT=52
+    END:VEVENT
+    END:VCALENDAR
+""")
+
+_INVALID_ICS = b'This is not valid ICS data at all.'
+
+_EMPTY_ICS = b'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Test//EN\nEND:VCALENDAR\n'
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _create_subscription(db, user, name='Work Calendar',
+                          url='https://example.com/feed.ics',
+                          enabled=True, color=None, cache_ttl_minutes=None):
+    """Persist a CalendarSubscription for *user* and return it."""
+    sub = CalendarSubscription(
+        user_id=user.id,
+        name=name,
+        url=url,
+        enabled=enabled,
+        color=color,
+        cache_ttl_minutes=cache_ttl_minutes,
+    )
+    db.session.add(sub)
+    db.session.commit()
+    return sub
+
+
+def _post_new_sub(client, name='My Cal', url='https://cal.example.com/feed.ics',
+                  color='', cache_ttl_minutes='', enabled='on'):
+    """POST to /calendar-subscriptions/new."""
+    data = {
+        'name': name,
+        'url': url,
+        'color': color,
+        'cache_ttl_minutes': cache_ttl_minutes,
+        'enabled': enabled,
+    }
+    return client.post('/calendar-subscriptions/new', data=data,
+                       follow_redirects=False)
+
+
+def _post_edit_sub(client, sub_id, name='Updated', url='https://cal.example.com/feed.ics',
+                   color='', cache_ttl_minutes='', enabled='on'):
+    """POST to /calendar-subscriptions/<id>/edit."""
+    data = {
+        'name': name,
+        'url': url,
+        'color': color,
+        'cache_ttl_minutes': cache_ttl_minutes,
+        'enabled': enabled,
+    }
+    return client.post(f'/calendar-subscriptions/{sub_id}/edit', data=data,
+                       follow_redirects=False)
+
+
+# ===========================================================================
+# Route: List subscriptions
+# ===========================================================================
+
+class TestSubscriptionIndex:
+    def test_requires_auth(self, client):
+        """GET /calendar-subscriptions/ redirects unauthenticated users."""
+        resp = client.get('/calendar-subscriptions/', follow_redirects=False)
+        assert resp.status_code in (301, 302)
+
+    def test_returns_200_when_authenticated(self, auth_client):
+        """Authenticated GET /calendar-subscriptions/ returns 200."""
+        resp = auth_client.get('/calendar-subscriptions/')
+        assert resp.status_code == 200
+
+    def test_shows_own_subscription(self, auth_client, db, test_user):
+        """A persisted subscription name appears in the list."""
+        _create_subscription(db, test_user, name='My Work Cal')
+        resp = auth_client.get('/calendar-subscriptions/')
+        assert b'My Work Cal' in resp.data
+
+    def test_does_not_show_other_users_subscription(self, auth_client, db):
+        """Subscriptions belonging to other users are not shown."""
+        from app.models import User
+        other = User(username='othercalsub')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        _create_subscription(db, other, name='Other Private Cal')
+        resp = auth_client.get('/calendar-subscriptions/')
+        assert b'Other Private Cal' not in resp.data
+
+    def test_empty_state_shown_when_no_subscriptions(self, auth_client, db):
+        """The empty-state prompt is rendered when there are no subscriptions."""
+        resp = auth_client.get('/calendar-subscriptions/')
+        assert resp.status_code == 200
+        assert b'No calendar subscriptions' in resp.data
+
+
+# ===========================================================================
+# Route: Create subscription
+# ===========================================================================
+
+class TestSubscriptionCreate:
+    def test_get_new_form_returns_200(self, auth_client):
+        """GET /calendar-subscriptions/new returns the form."""
+        resp = auth_client.get('/calendar-subscriptions/new')
+        assert resp.status_code == 200
+
+    def test_post_valid_creates_subscription(self, auth_client, db, test_user):
+        """Valid POST creates a CalendarSubscription in the database."""
+        resp = _post_new_sub(auth_client, name='Holiday Cal',
+                             url='https://cal.test/holidays.ics')
+        assert resp.status_code in (301, 302)
+        sub = CalendarSubscription.query.filter_by(
+            user_id=test_user.id, name='Holiday Cal'
+        ).first()
+        assert sub is not None
+        assert sub.url == 'https://cal.test/holidays.ics'
+
+    def test_post_normalises_webcal_scheme(self, auth_client, db, test_user):
+        """webcal:// URLs are normalised to https:// when stored."""
+        _post_new_sub(auth_client, name='Webcal Cal',
+                      url='webcal://cal.test/feed.ics')
+        sub = CalendarSubscription.query.filter_by(
+            user_id=test_user.id, name='Webcal Cal'
+        ).first()
+        assert sub is not None
+        assert sub.url.startswith('https://')
+
+    def test_post_missing_name_returns_422(self, auth_client):
+        """Submitting without a name returns 422."""
+        resp = _post_new_sub(auth_client, name='')
+        assert resp.status_code == 422
+
+    def test_post_missing_url_returns_422(self, auth_client):
+        """Submitting without a URL returns 422."""
+        resp = _post_new_sub(auth_client, url='')
+        assert resp.status_code == 422
+
+    def test_post_invalid_url_scheme_returns_422(self, auth_client):
+        """An ftp:// URL is rejected with 422."""
+        resp = _post_new_sub(auth_client, url='ftp://cal.test/feed.ics')
+        assert resp.status_code == 422
+
+    def test_post_sets_ttl_when_provided(self, auth_client, db, test_user):
+        """Custom TTL is persisted when provided."""
+        _post_new_sub(auth_client, name='TTL Cal',
+                      url='https://cal.test/ttl.ics', cache_ttl_minutes='60')
+        sub = CalendarSubscription.query.filter_by(
+            user_id=test_user.id, name='TTL Cal'
+        ).first()
+        assert sub is not None
+        assert sub.cache_ttl_minutes == 60
+
+    def test_post_requires_auth(self, client):
+        """Unauthenticated POST redirects to login."""
+        resp = _post_new_sub(client)
+        assert resp.status_code in (301, 302)
+
+    def test_disabled_subscription_stored(self, auth_client, db, test_user):
+        """Subscription created with enabled=off is stored as disabled."""
+        _post_new_sub(auth_client, name='Disabled Cal',
+                      url='https://cal.test/off.ics', enabled='off')
+        sub = CalendarSubscription.query.filter_by(
+            user_id=test_user.id, name='Disabled Cal'
+        ).first()
+        assert sub is not None
+        assert sub.enabled is False
+
+
+# ===========================================================================
+# Route: Edit subscription
+# ===========================================================================
+
+class TestSubscriptionEdit:
+    def test_get_edit_form_returns_200(self, auth_client, db, test_user):
+        """GET /calendar-subscriptions/<id>/edit returns the form."""
+        sub = _create_subscription(db, test_user)
+        resp = auth_client.get(f'/calendar-subscriptions/{sub.id}/edit')
+        assert resp.status_code == 200
+
+    def test_post_edit_updates_name(self, auth_client, db, test_user):
+        """POST /calendar-subscriptions/<id>/edit persists a new name."""
+        sub = _create_subscription(db, test_user, name='Old Name')
+        _post_edit_sub(auth_client, sub.id, name='New Name',
+                       url='https://cal.test/feed.ics')
+        db.session.refresh(sub)
+        assert sub.name == 'New Name'
+
+    def test_post_edit_updates_color(self, auth_client, db, test_user):
+        """Color is updated correctly."""
+        sub = _create_subscription(db, test_user)
+        _post_edit_sub(auth_client, sub.id, color='#ff0000')
+        db.session.refresh(sub)
+        assert sub.color == '#ff0000'
+
+    def test_edit_nonexistent_returns_404(self, auth_client):
+        """Editing a subscription that does not exist returns 404."""
+        resp = _post_edit_sub(auth_client, 999999)
+        assert resp.status_code == 404
+
+    def test_edit_other_users_subscription_returns_404(self, auth_client, db):
+        """Users cannot edit another user's subscription."""
+        from app.models import User
+        other = User(username='caleditother')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        sub = _create_subscription(db, other, name='Private Sub')
+        resp = _post_edit_sub(auth_client, sub.id)
+        assert resp.status_code == 404
+
+    def test_edit_requires_auth(self, client, db, test_user):
+        """Unauthenticated edit attempt redirects to login."""
+        sub = _create_subscription(db, test_user)
+        resp = client.post(
+            f'/calendar-subscriptions/{sub.id}/edit',
+            data={'name': 'x', 'url': 'https://cal.test/feed.ics'},
+            follow_redirects=False,
+        )
+        assert resp.status_code in (301, 302)
+
+
+# ===========================================================================
+# Route: Delete subscription
+# ===========================================================================
+
+class TestSubscriptionDelete:
+    def test_delete_removes_subscription(self, auth_client, db, test_user):
+        """POST /calendar-subscriptions/<id>/delete removes the row."""
+        sub = _create_subscription(db, test_user)
+        sub_id = sub.id
+        auth_client.post(f'/calendar-subscriptions/{sub_id}/delete')
+        assert db.session.get(CalendarSubscription, sub_id) is None
+
+    def test_delete_redirects(self, auth_client, db, test_user):
+        """Deleting a subscription issues a redirect."""
+        sub = _create_subscription(db, test_user)
+        resp = auth_client.post(f'/calendar-subscriptions/{sub.id}/delete',
+                                follow_redirects=False)
+        assert resp.status_code in (301, 302)
+
+    def test_delete_nonexistent_returns_404(self, auth_client):
+        """Deleting a non-existent subscription returns 404."""
+        resp = auth_client.post('/calendar-subscriptions/999999/delete')
+        assert resp.status_code == 404
+
+    def test_delete_other_users_returns_404(self, auth_client, db):
+        """Users cannot delete another user's subscription."""
+        from app.models import User
+        other = User(username='caldelother')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        sub = _create_subscription(db, other)
+        resp = auth_client.post(f'/calendar-subscriptions/{sub.id}/delete')
+        assert resp.status_code == 404
+
+    def test_delete_requires_auth(self, client, db, test_user):
+        """Unauthenticated delete attempt redirects to login."""
+        sub = _create_subscription(db, test_user)
+        resp = client.post(f'/calendar-subscriptions/{sub.id}/delete',
+                           follow_redirects=False)
+        assert resp.status_code in (301, 302)
+
+
+# ===========================================================================
+# Route: Toggle enabled
+# ===========================================================================
+
+class TestSubscriptionToggle:
+    def test_toggle_enables_disabled_subscription(self, auth_client, db, test_user):
+        """Toggle flips disabled → enabled."""
+        sub = _create_subscription(db, test_user, enabled=False)
+        auth_client.post(f'/calendar-subscriptions/{sub.id}/toggle')
+        db.session.refresh(sub)
+        assert sub.enabled is True
+
+    def test_toggle_disables_enabled_subscription(self, auth_client, db, test_user):
+        """Toggle flips enabled → disabled."""
+        sub = _create_subscription(db, test_user, enabled=True)
+        auth_client.post(f'/calendar-subscriptions/{sub.id}/toggle')
+        db.session.refresh(sub)
+        assert sub.enabled is False
+
+    def test_toggle_other_users_returns_404(self, auth_client, db):
+        """Toggling another user's subscription returns 404."""
+        from app.models import User
+        other = User(username='caltogother')
+        other.set_password('pass')
+        db.session.add(other)
+        db.session.commit()
+        sub = _create_subscription(db, other)
+        resp = auth_client.post(f'/calendar-subscriptions/{sub.id}/toggle')
+        assert resp.status_code == 404
+
+
+# ===========================================================================
+# Service: URL validation
+# ===========================================================================
+
+class TestUrlValidation:
+    def test_valid_https_url(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('https://example.com/feed.ics') is None
+
+    def test_valid_http_url(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('http://example.com/feed.ics') is None
+
+    def test_valid_webcal_url(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('webcal://example.com/feed.ics') is None
+
+    def test_empty_url_returns_error(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('') is not None
+
+    def test_ftp_url_returns_error(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('ftp://example.com/feed.ics') is not None
+
+    def test_no_hostname_returns_error(self):
+        from app.services.calendar_subscriptions import validate_subscription_url
+        assert validate_subscription_url('https://') is not None
+
+
+# ===========================================================================
+# Service: ICS parsing
+# ===========================================================================
+
+class TestIcsParsing:
+    def test_parse_basic_event(self, app):
+        """Basic VEVENT is parsed into a SubscriptionEvent."""
+        from app.services.calendar_subscriptions import parse_ics_events
+
+        sub = MagicMock()
+        sub.id = 1
+        sub.name = 'Test Sub'
+        sub.color = '#6366f1'
+
+        with app.app_context():
+            events = parse_ics_events(_VALID_ICS, sub, lookahead_days=365 * 100)
+
+        assert len(events) == 1
+        ev = events[0]
+        assert ev.title == 'Test Meeting'
+        assert ev.location == 'Room A'
+        assert ev.notes == 'An important meeting.'
+        assert ev.source_type == 'subscription'
+        assert ev.source_id == 1
+        assert ev.read_only is True
+
+    def test_parse_all_day_event(self, app):
+        """An all-day VEVENT has all_day=True."""
+        from app.services.calendar_subscriptions import parse_ics_events
+
+        sub = MagicMock()
+        sub.id = 1
+        sub.name = 'Holiday Sub'
+        sub.color = None
+
+        with app.app_context():
+            events = parse_ics_events(_ALL_DAY_ICS, sub, lookahead_days=365 * 100)
+
+        assert len(events) == 1
+        ev = events[0]
+        assert ev.title == 'Company Holiday'
+        assert ev.all_day is True
+        assert ev.is_all_day is True
+
+    def test_parse_recurring_event(self, app):
+        """A recurring VEVENT is expanded into multiple occurrences."""
+        from app.services.calendar_subscriptions import parse_ics_events
+        from datetime import date, timedelta
+
+        # Use a dtstart in the near past so occurrences fall within our window
+        dtstart = (datetime.utcnow() - timedelta(days=3)).strftime('%Y%m%dT%H%M%SZ')
+        ics = _RECURRING_ICS_TEMPLATE.format(dtstart=dtstart).encode()
+
+        sub = MagicMock()
+        sub.id = 1
+        sub.name = 'Recurring Sub'
+        sub.color = None
+
+        with app.app_context():
+            events = parse_ics_events(ics, sub, lookahead_days=60)
+
+        # Should have at least a few occurrences within the 60-day window
+        assert len(events) >= 1
+        for ev in events:
+            assert ev.title == 'Weekly Standup'
+
+    def test_parse_empty_calendar_returns_empty_list(self, app):
+        """An empty VCALENDAR returns an empty list without error."""
+        from app.services.calendar_subscriptions import parse_ics_events
+
+        sub = MagicMock()
+        sub.id = 1
+        sub.name = 'Empty Sub'
+        sub.color = None
+
+        with app.app_context():
+            events = parse_ics_events(_EMPTY_ICS, sub, lookahead_days=60)
+
+        assert events == []
+
+    def test_parse_invalid_ics_raises_value_error(self, app):
+        """Malformed ICS data raises ValueError."""
+        from app.services.calendar_subscriptions import parse_ics_events
+
+        sub = MagicMock()
+        sub.id = 1
+        sub.name = 'Bad Sub'
+        sub.color = None
+
+        with app.app_context():
+            with pytest.raises(ValueError):
+                parse_ics_events(_INVALID_ICS, sub, lookahead_days=60)
+
+
+# ===========================================================================
+# Service: fetch_calendar_feed validation
+# ===========================================================================
+
+class TestFetchCalendarFeed:
+    def test_rejects_non_ics_response(self, app):
+        """A response that is not an ICS feed raises ValueError."""
+        from app.services.calendar_subscriptions import fetch_calendar_feed
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.content = b'<html><body>Not a calendar</body></html>'
+
+        with app.app_context():
+            with patch('requests.get', return_value=mock_response):
+                with pytest.raises(ValueError, match='BEGIN:VCALENDAR'):
+                    fetch_calendar_feed('https://example.com/notical.html')
+
+    def test_normalises_webcal_scheme(self, app):
+        """webcal:// is converted to https:// before the request."""
+        from app.services.calendar_subscriptions import fetch_calendar_feed
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.content = b'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n'
+
+        with app.app_context():
+            with patch('requests.get', return_value=mock_response) as mock_get:
+                fetch_calendar_feed('webcal://cal.example.com/feed.ics')
+                call_url = mock_get.call_args[0][0]
+                assert call_url.startswith('https://')
+
+
+# ===========================================================================
+# Service: cache behaviour
+# ===========================================================================
+
+class TestCacheBehaviour:
+    def _make_sub(self, sub_id=1, name='Test', url='https://cal.test/feed.ics',
+                  enabled=True, cache_ttl_minutes=None):
+        """Return a mock subscription object."""
+        sub = MagicMock()
+        sub.id = sub_id
+        sub.name = name
+        sub.url = url
+        sub.enabled = enabled
+        sub.cache_ttl_minutes = cache_ttl_minutes
+        sub.color = None
+        return sub
+
+    def test_cache_hit_returns_cached_events(self, app):
+        """A fresh cache entry is returned without a network call."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=900)
+        now = datetime.utcnow()
+
+        fake_events = [MagicMock()]
+        svc._write_cache(sub.id, {
+            'events': fake_events,
+            'fetched_at': now,
+            'expires_at': now + timedelta(minutes=30),
+            'success': True,
+            'error': None,
+        })
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed') as mock_fetch:
+                result = svc.get_cached_subscription_events(sub)
+                mock_fetch.assert_not_called()
+
+        assert result is fake_events
+        svc.invalidate_cache(sub.id)
+
+    def test_cache_miss_triggers_fetch(self, app):
+        """An absent cache entry causes a network fetch."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=901)
+        svc.invalidate_cache(sub.id)
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+                with patch.object(svc, '_update_db_status'):
+                    result = svc.get_cached_subscription_events(sub)
+
+        assert isinstance(result, list)
+        svc.invalidate_cache(sub.id)
+
+    def test_expired_cache_triggers_refresh(self, app):
+        """An expired cache entry is refreshed on next access."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=902)
+        old_events = [MagicMock()]
+        svc._write_cache(sub.id, {
+            'events': old_events,
+            'fetched_at': datetime.utcnow() - timedelta(hours=2),
+            'expires_at': datetime.utcnow() - timedelta(hours=1),  # expired
+            'success': True,
+            'error': None,
+        })
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+                with patch.object(svc, '_update_db_status'):
+                    result = svc.get_cached_subscription_events(sub)
+
+        # Fresh events from the real ICS, not the stale mock
+        assert result is not old_events
+        svc.invalidate_cache(sub.id)
+
+    def test_stale_cache_returned_on_fetch_error(self, app):
+        """When refresh fails, stale cache events are returned."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=903)
+        stale_events = [MagicMock()]
+        svc._write_cache(sub.id, {
+            'events': stale_events,
+            'fetched_at': datetime.utcnow() - timedelta(hours=2),
+            'expires_at': datetime.utcnow() - timedelta(hours=1),  # expired
+            'success': True,
+            'error': None,
+        })
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed',
+                              side_effect=Exception('Network error')):
+                with patch.object(svc, '_update_db_status'):
+                    result = svc.get_cached_subscription_events(sub)
+
+        # Stale cache is returned, not an empty list
+        assert result is stale_events
+        svc.invalidate_cache(sub.id)
+
+    def test_empty_list_returned_when_no_cache_and_error(self, app):
+        """Empty list is returned when fetch fails and there is no cache."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=904)
+        svc.invalidate_cache(sub.id)
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed',
+                              side_effect=Exception('Network error')):
+                with patch.object(svc, '_update_db_status'):
+                    result = svc.get_cached_subscription_events(sub)
+
+        assert result == []
+
+    def test_force_refresh_bypasses_fresh_cache(self, app):
+        """force=True causes a network fetch even when cache is fresh."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=905)
+        now = datetime.utcnow()
+        svc._write_cache(sub.id, {
+            'events': [],
+            'fetched_at': now,
+            'expires_at': now + timedelta(minutes=30),
+            'success': True,
+            'error': None,
+        })
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+                with patch.object(svc, '_update_db_status'):
+                    svc.refresh_subscription_events(sub, force=True)
+
+        svc.invalidate_cache(sub.id)
+
+    def test_invalidate_cache_removes_entry(self, app):
+        """invalidate_cache removes the cached entry."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(sub_id=906)
+        svc._write_cache(sub.id, {'events': [], 'fetched_at': datetime.utcnow(),
+                                   'expires_at': datetime.utcnow() + timedelta(minutes=30),
+                                   'success': True, 'error': None})
+        svc.invalidate_cache(sub.id)
+        assert svc._read_cache(sub.id) is None
+
+
+# ===========================================================================
+# Service: get_all_display_events_for_user — merge behaviour
+# ===========================================================================
+
+class TestMergedEventDisplay:
+    def test_local_and_subscription_events_merged(self, app, db, test_user):
+        """Local DB events and subscription events are merged and time-sorted."""
+        from app.models import Event
+        from app.services import calendar_subscriptions as svc
+        from app.services.calendar_subscriptions import SubscriptionEvent
+
+        with app.app_context():
+            # Create a local event
+            local_ev = Event(
+                user_id=test_user.id,
+                title='Local Meeting',
+                start_at=datetime(2099, 6, 1, 9, 0),
+            )
+            db.session.add(local_ev)
+            db.session.commit()
+
+            # Stub subscription returning a remote event
+            sub_ev = SubscriptionEvent(
+                id='sub_1_fake',
+                title='Remote Meeting',
+                start_at=datetime(2099, 6, 1, 10, 0),
+                source_type='subscription',
+                source_id=1,
+                source_name='Test Sub',
+            )
+            with patch.object(svc, 'get_user_calendar_subscriptions',
+                              return_value=[MagicMock(id=1)]):
+                with patch.object(svc, 'get_cached_subscription_events',
+                                  return_value=[sub_ev]):
+                    events = svc.get_all_display_events_for_user(test_user)
+
+        titles = [e.title for e in events]
+        assert 'Local Meeting' in titles
+        assert 'Remote Meeting' in titles
+        # Verify time-sorted order
+        starts = [e.start_at for e in events if e.start_at]
+        assert starts == sorted(starts)
+
+    def test_broken_subscription_does_not_crash(self, app, db, test_user):
+        """A subscription that raises an exception does not break the merge."""
+        from app.services import calendar_subscriptions as svc
+
+        with app.app_context():
+            broken_sub = MagicMock()
+            broken_sub.id = 999
+
+            with patch.object(svc, 'get_user_calendar_subscriptions',
+                              return_value=[broken_sub]):
+                with patch.object(svc, 'get_cached_subscription_events',
+                                  side_effect=Exception('boom')):
+                    events = svc.get_all_display_events_for_user(test_user)
+
+        # Should return successfully with just DB events (empty since no local events)
+        assert isinstance(events, list)
+
+
+# ===========================================================================
+# Events page: subscription events appear and local events still work
+# ===========================================================================
+
+class TestEventsPageWithSubscriptions:
+    def test_events_page_still_works_without_subscriptions(self, auth_client):
+        """GET /events/ renders fine when there are no subscriptions."""
+        resp = auth_client.get('/events/')
+        assert resp.status_code == 200
+
+    def test_subscription_event_shown_on_events_page(self, auth_client, app,
+                                                      db, test_user):
+        """A subscription event title appears on the events page."""
+        from app.services import calendar_subscriptions as svc
+        from app.services.calendar_subscriptions import SubscriptionEvent
+
+        sub_ev = SubscriptionEvent(
+            id='sub_2_abc',
+            title='External Conference',
+            start_at=datetime.utcnow() + timedelta(hours=1),
+            source_type='subscription',
+            source_id=2,
+            source_name='Work Sub',
+        )
+        with patch.object(svc, 'get_user_calendar_subscriptions',
+                          return_value=[MagicMock(id=2)]):
+            with patch.object(svc, 'get_cached_subscription_events',
+                              return_value=[sub_ev]):
+                resp = auth_client.get('/events/?view=upcoming')
+
+        assert resp.status_code == 200
+        assert b'External Conference' in resp.data
+        assert b'Subscribed' in resp.data
+
+    def test_subscription_error_does_not_break_events_page(self, auth_client, app):
+        """A failing subscription service does not crash the events page."""
+        from app.services import calendar_subscriptions as svc
+
+        with patch.object(svc, 'get_user_calendar_subscriptions',
+                          side_effect=Exception('service unavailable')):
+            resp = auth_client.get('/events/')
+
+        assert resp.status_code == 200

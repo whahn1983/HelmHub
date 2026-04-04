@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 _cache: dict[int, dict] = {}
 _cache_lock = threading.Lock()
+_refresh_inflight: set[int] = set()
+_refresh_inflight_lock = threading.Lock()
 
 _DEFAULT_TTL_MINUTES = 30
 _DEFAULT_TIMEOUT_SECONDS = 120
@@ -605,6 +607,9 @@ def refresh_subscription_events_background(subscription_id: int, app) -> None:
     """
     Spawn a daemon thread to refresh a subscription's cache.
 
+    Duplicate refreshes for the same subscription are coalesced so repeated
+    requests cannot create a thread storm while an existing refresh is active.
+
     The caller must pass the concrete Flask application object (not a
     proxy), e.g.::
 
@@ -615,13 +620,22 @@ def refresh_subscription_events_background(subscription_id: int, app) -> None:
     The thread pushes its own application context so all Flask/SQLAlchemy
     helpers work correctly outside the request lifecycle.
     """
+    with _refresh_inflight_lock:
+        if subscription_id in _refresh_inflight:
+            return
+        _refresh_inflight.add(subscription_id)
+
     def _worker() -> None:
-        with app.app_context():
-            from app.models.calendar_subscription import CalendarSubscription  # noqa: PLC0415
-            from app.extensions import db  # noqa: PLC0415
-            sub = db.session.get(CalendarSubscription, subscription_id)
-            if sub:
-                refresh_subscription_events(sub, force=True)
+        try:
+            with app.app_context():
+                from app.models.calendar_subscription import CalendarSubscription  # noqa: PLC0415
+                from app.extensions import db  # noqa: PLC0415
+                sub = db.session.get(CalendarSubscription, subscription_id)
+                if sub:
+                    refresh_subscription_events(sub, force=True)
+        finally:
+            with _refresh_inflight_lock:
+                _refresh_inflight.discard(subscription_id)
 
     thread = threading.Thread(
         target=_worker,

@@ -15,7 +15,7 @@ from datetime import datetime, date, timedelta
 
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    request, flash, abort, make_response,
+    request, flash, abort, make_response, current_app,
 )
 from flask_login import login_required, current_user
 
@@ -26,6 +26,7 @@ from app.services.auth_service import parse_datetime
 logger = logging.getLogger(__name__)
 
 events_bp = Blueprint('events', __name__, url_prefix='/events')
+_EVENTS_PAGE_SIZE = 10
 
 
 # ---------------------------------------------------------------------------
@@ -147,15 +148,26 @@ def _merge_subscription_events(
     try:
         from app.services.calendar_subscriptions import (
             get_user_calendar_subscriptions,
-            get_cached_subscription_events,
+            get_cached_events_stale_ok,
+            is_cache_stale,
+            refresh_subscription_events_background,
         )
 
         subscriptions = get_user_calendar_subscriptions(current_user.id)
         sub_events = []
+        per_subscription_limit = int(
+            current_app.config.get('CALENDAR_SUBSCRIPTION_VIEW_MAX_EVENTS', 200)
+        )
 
         for sub in subscriptions:
             try:
-                events = get_cached_subscription_events(sub)
+                events = get_cached_events_stale_ok(sub)
+                if is_cache_stale(sub):
+                    refresh_subscription_events_background(
+                        sub.id, current_app._get_current_object()
+                    )
+
+                used = 0
                 for ev in events:
                     if ev.start_at is None:
                         continue
@@ -166,6 +178,9 @@ def _merge_subscription_events(
                         if not (ev.start_at >= now and ev.start_at < week_end):
                             continue
                     sub_events.append(ev)
+                    used += 1
+                    if used >= per_subscription_limit:
+                        break
             except Exception:
                 logger.exception(
                     'Failed to get events for subscription %s', sub.id
@@ -194,6 +209,10 @@ def index():
       view – today | upcoming | all (default: all)
     """
     view = request.args.get('view', 'all').strip().lower()
+    try:
+        page = max(1, int(request.args.get('page', '1')))
+    except ValueError:
+        page = 1
 
     now = datetime.utcnow()
     today_start = datetime.combine(date.today(), datetime.min.time())
@@ -219,21 +238,42 @@ def index():
     merged = _merge_subscription_events(
         db_events, view, now, today_start, today_end, week_end
     )
-    grouped_events = _group_events_by_date(merged)
+    start_idx = (page - 1) * _EVENTS_PAGE_SIZE
+    end_idx = start_idx + _EVENTS_PAGE_SIZE
+    page_events = merged[start_idx:end_idx]
+    grouped_events = _group_events_by_date(page_events)
+    has_more = end_idx < len(merged)
+
+    if _is_htmx() and page > 1:
+        return render_template(
+            'partials/events_load_more.html',
+            events=page_events,
+            grouped_events=grouped_events,
+            view=view,
+            page=page,
+            next_page=page + 1,
+            has_more=has_more,
+        )
 
     if _is_htmx():
         return render_template(
             'partials/events_list.html',
-            events=merged,
+            events=page_events,
             grouped_events=grouped_events,
             view=view,
+            page=page,
+            next_page=page + 1,
+            has_more=has_more,
         )
 
     return render_template(
         'events/index.html',
-        events=merged,
+        events=page_events,
         grouped_events=grouped_events,
         view=view,
+        page=page,
+        next_page=page + 1,
+        has_more=has_more,
     )
 
 

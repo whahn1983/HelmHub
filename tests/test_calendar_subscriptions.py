@@ -757,8 +757,9 @@ class TestEventsPageWithSubscriptions:
         )
         with patch.object(svc, 'get_user_calendar_subscriptions',
                           return_value=[MagicMock(id=2)]):
-            with patch.object(svc, 'get_cached_subscription_events',
-                              return_value=[sub_ev]):
+            with patch.object(svc, 'get_cached_events_stale_ok',
+                              return_value=[sub_ev]), \
+                 patch.object(svc, 'is_cache_stale', return_value=False):
                 resp = auth_client.get('/events/?view=upcoming')
 
         assert resp.status_code == 200

@@ -107,6 +107,45 @@ class TestEventIndex:
         response = auth_client.get('/events/')
         assert b'Private event' not in response.data
 
+    def test_events_index_paginates_first_10(self, auth_client, db, test_user):
+        """The first page shows 10 events and hides later rows until load-more."""
+        base = datetime(2099, 12, 1, 9, 0)
+        for idx in range(11):
+            _create_event(
+                db,
+                test_user,
+                title=f'Paged Event {idx + 1}',
+                start_at=base + timedelta(minutes=idx),
+            )
+
+        response = auth_client.get('/events/?view=all')
+
+        assert response.status_code == 200
+        assert b'Paged Event 1' in response.data
+        assert b'Paged Event 10' in response.data
+        assert b'Paged Event 11' not in response.data
+        assert b'Load more' in response.data
+
+    def test_events_index_load_more_returns_next_page(self, auth_client, db, test_user):
+        """HTMX page=2 returns appendable markup with the remaining events."""
+        base = datetime(2099, 12, 1, 9, 0)
+        for idx in range(11):
+            _create_event(
+                db,
+                test_user,
+                title=f'Chunk Event {idx + 1}',
+                start_at=base + timedelta(minutes=idx),
+            )
+
+        response = auth_client.get(
+            '/events/?view=all&page=2',
+            headers={'HX-Request': 'true'},
+        )
+
+        assert response.status_code == 200
+        assert b'id="events-appended"' in response.data
+        assert b'Chunk Event 11' in response.data
+
 
 # ---------------------------------------------------------------------------
 # Create event

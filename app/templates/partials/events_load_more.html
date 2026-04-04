@@ -1,0 +1,15 @@
+<div id="events-appended">
+  {% include 'partials/events_chunk.html' %}
+</div>
+<div id="events-load-more" hx-swap-oob="outerHTML">
+  {% if has_more %}
+    <button
+      class="btn btn-secondary"
+      hx-get="/events/?view={{ view }}&page={{ next_page }}"
+      hx-target="#events-feed"
+      hx-swap="beforeend"
+      hx-select="#events-appended"
+      hx-indicator="#events-load-more"
+    >Load more</button>
+  {% endif %}
+</div>

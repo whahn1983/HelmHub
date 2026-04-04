@@ -17,6 +17,7 @@ from datetime import datetime
 
 from flask import Flask, g, render_template, send_from_directory
 from flask_login import current_user
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import config
@@ -234,6 +235,13 @@ def _configure_login_manager(app: Flask) -> None:  # noqa: ARG001
         try:
             return db.session.get(User, int(user_id))
         except (ValueError, TypeError):
+            return None
+        except SQLAlchemyError:
+            # Avoid a hard 500 on stale/broken DB connections while loading
+            # the session user; instead clear the failed transaction state and
+            # treat as anonymous for this request.
+            db.session.rollback()
+            logger.exception('Failed to load user %s from database.', user_id)
             return None
 
 

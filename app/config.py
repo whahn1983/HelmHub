@@ -32,6 +32,11 @@ class BaseConfig:
         'DATABASE_URL', 'sqlite:///helmhub.db'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
+    # Keep pooled connections healthy in long-running deployments (e.g.
+    # behind gunicorn/uwsgi), reducing stale-connection failures.
+    SQLALCHEMY_ENGINE_OPTIONS: dict = {
+        'pool_pre_ping': True,
+    }
 
     # ------------------------------------------------------------------
     # CSRF

@@ -45,7 +45,7 @@ _cache: dict[int, dict] = {}
 _cache_lock = threading.Lock()
 
 _DEFAULT_TTL_MINUTES = 30
-_DEFAULT_TIMEOUT_SECONDS = 15
+_DEFAULT_TIMEOUT_SECONDS = 120
 _DEFAULT_MAX_EVENTS = 500
 _DEFAULT_LOOKAHEAD_DAYS = 60
 

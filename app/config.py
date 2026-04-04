@@ -74,7 +74,7 @@ class BaseConfig:
     )
     # HTTP request timeout when fetching a remote ICS feed (seconds)
     CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS: int = int(
-        os.environ.get('CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', '15')
+        os.environ.get('CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', '120')
     )
     # Maximum number of events to keep per subscription after parsing
     CALENDAR_SUBSCRIPTION_MAX_EVENTS: int = int(

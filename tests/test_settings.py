@@ -13,7 +13,7 @@ Tests for HelmHub settings route:
 import json
 
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models import Setting
 
@@ -284,14 +284,13 @@ class TestSettingsSaveResponse:
 
 class TestSettingGetOrCreateRace:
     def test_get_or_create_handles_unique_race(self, db, test_user, monkeypatch):
-        """If a concurrent insert wins, get_or_create returns the existing row."""
-        original_flush = db.session.flush
+        """If an insert race occurs, get_or_create returns the existing row."""
+        existing = Setting(user_id=test_user.id)
+        db.session.add(existing)
+        db.session.commit()
 
         def raced_flush(*args, **kwargs):
-            with Session(bind=db.engine) as other_session:
-                other_session.add(Setting(user_id=test_user.id))
-                other_session.commit()
-            return original_flush(*args, **kwargs)
+            raise IntegrityError('INSERT settings', {}, Exception('simulated race'))
 
         monkeypatch.setattr(db.session, 'flush', raced_flush)
 
@@ -299,6 +298,7 @@ class TestSettingGetOrCreateRace:
 
         assert setting is not None
         assert setting.user_id == test_user.id
+        assert setting.id == existing.id
         assert Setting.query.filter_by(user_id=test_user.id).count() == 1
 
     def test_get_or_create_ignores_pending_duplicate_before_select(self, db, test_user):

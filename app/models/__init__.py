@@ -18,6 +18,7 @@ from app.models.event import Event
 from app.models.setting import Setting
 from app.models.bookmark import Bookmark
 from app.models.calendar_subscription import CalendarSubscription
+from app.models.subscription_event import SubscriptionEvent
 
 __all__ = [
     'User',
@@ -28,4 +29,5 @@ __all__ = [
     'Setting',
     'Bookmark',
     'CalendarSubscription',
+    'SubscriptionEvent',
 ]

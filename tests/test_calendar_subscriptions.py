@@ -524,26 +524,42 @@ class TestFetchCalendarFeed:
 # ===========================================================================
 
 class TestCacheBehaviour:
-    def _make_sub(self, sub_id=1, name='Test', url='https://cal.test/feed.ics',
+    @staticmethod
+    def _fake_event(event_id: str, title: str = 'Cached Event'):
+        from app.services.calendar_subscriptions import SubscriptionEvent
+        return SubscriptionEvent(
+            id=event_id,
+            title=title,
+            start_at=datetime(2099, 1, 1, 10, 0),
+            end_at=datetime(2099, 1, 1, 11, 0),
+            source_id=1,
+            source_name='Test Sub',
+            source_type='subscription',
+        )
+
+    def _make_sub(self, db, user, sub_id=1, name='Test', url='https://cal.test/feed.ics',
                   enabled=True, cache_ttl_minutes=None):
-        """Return a mock subscription object."""
-        sub = MagicMock()
-        sub.id = sub_id
-        sub.name = name
-        sub.url = url
-        sub.enabled = enabled
-        sub.cache_ttl_minutes = cache_ttl_minutes
-        sub.color = None
+        """Persist and return a subscription object."""
+        sub = CalendarSubscription(
+            id=sub_id,
+            user_id=user.id,
+            name=name,
+            url=url,
+            enabled=enabled,
+            cache_ttl_minutes=cache_ttl_minutes,
+        )
+        db.session.add(sub)
+        db.session.commit()
         return sub
 
-    def test_cache_hit_returns_cached_events(self, app):
+    def test_cache_hit_returns_cached_events(self, app, db, test_user):
         """A fresh cache entry is returned without a network call."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=900)
+        sub = self._make_sub(db, test_user, sub_id=900)
         now = datetime.utcnow()
 
-        fake_events = [MagicMock()]
+        fake_events = [self._fake_event('sub_900_1')]
         svc._write_cache(sub.id, {
             'events': fake_events,
             'fetched_at': now,
@@ -557,14 +573,15 @@ class TestCacheBehaviour:
                 result = svc.get_cached_subscription_events(sub)
                 mock_fetch.assert_not_called()
 
-        assert result is fake_events
+        assert len(result) == 1
+        assert result[0].id == 'sub_900_1'
         svc.invalidate_cache(sub.id)
 
-    def test_cache_miss_triggers_fetch(self, app):
+    def test_cache_miss_triggers_fetch(self, app, db, test_user):
         """An absent cache entry causes a network fetch."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=901)
+        sub = self._make_sub(db, test_user, sub_id=901)
         svc.invalidate_cache(sub.id)
 
         with app.app_context():
@@ -575,12 +592,12 @@ class TestCacheBehaviour:
         assert isinstance(result, list)
         svc.invalidate_cache(sub.id)
 
-    def test_expired_cache_triggers_refresh(self, app):
+    def test_expired_cache_triggers_refresh(self, app, db, test_user):
         """An expired cache entry is refreshed on next access."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=902)
-        old_events = [MagicMock()]
+        sub = self._make_sub(db, test_user, sub_id=902)
+        old_events = [self._fake_event('sub_902_1')]
         svc._write_cache(sub.id, {
             'events': old_events,
             'fetched_at': datetime.utcnow() - timedelta(hours=2),
@@ -598,12 +615,12 @@ class TestCacheBehaviour:
         assert result is not old_events
         svc.invalidate_cache(sub.id)
 
-    def test_stale_cache_returned_on_fetch_error(self, app):
+    def test_stale_cache_returned_on_fetch_error(self, app, db, test_user):
         """When refresh fails, stale cache events are returned."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=903)
-        stale_events = [MagicMock()]
+        sub = self._make_sub(db, test_user, sub_id=903)
+        stale_events = [self._fake_event('sub_903_1')]
         svc._write_cache(sub.id, {
             'events': stale_events,
             'fetched_at': datetime.utcnow() - timedelta(hours=2),
@@ -619,14 +636,15 @@ class TestCacheBehaviour:
                     result = svc.get_cached_subscription_events(sub)
 
         # Stale cache is returned, not an empty list
-        assert result is stale_events
+        assert len(result) == 1
+        assert result[0].id == 'sub_903_1'
         svc.invalidate_cache(sub.id)
 
-    def test_empty_list_returned_when_no_cache_and_error(self, app):
+    def test_empty_list_returned_when_no_cache_and_error(self, app, db, test_user):
         """Empty list is returned when fetch fails and there is no cache."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=904)
+        sub = self._make_sub(db, test_user, sub_id=904)
         svc.invalidate_cache(sub.id)
 
         with app.app_context():
@@ -637,11 +655,11 @@ class TestCacheBehaviour:
 
         assert result == []
 
-    def test_force_refresh_bypasses_fresh_cache(self, app):
+    def test_force_refresh_bypasses_fresh_cache(self, app, db, test_user):
         """force=True causes a network fetch even when cache is fresh."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=905)
+        sub = self._make_sub(db, test_user, sub_id=905)
         now = datetime.utcnow()
         svc._write_cache(sub.id, {
             'events': [],
@@ -658,23 +676,23 @@ class TestCacheBehaviour:
 
         svc.invalidate_cache(sub.id)
 
-    def test_invalidate_cache_removes_entry(self, app):
+    def test_invalidate_cache_removes_entry(self, app, db, test_user):
         """invalidate_cache removes the cached entry."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=906)
+        sub = self._make_sub(db, test_user, sub_id=906)
         svc._write_cache(sub.id, {'events': [], 'fetched_at': datetime.utcnow(),
                                    'expires_at': datetime.utcnow() + timedelta(minutes=30),
                                    'success': True, 'error': None})
         svc.invalidate_cache(sub.id)
         assert svc._read_cache(sub.id) is None
 
-    def test_get_cached_events_or_refresh_on_miss_uses_cache(self, app):
+    def test_get_cached_events_or_refresh_on_miss_uses_cache(self, app, db, test_user):
         """The warmup helper does not refresh when cache is already present."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=907)
-        cached_events = [MagicMock()]
+        sub = self._make_sub(db, test_user, sub_id=907)
+        cached_events = [self._fake_event('sub_907_1')]
         now = datetime.utcnow()
         svc._write_cache(sub.id, {
             'events': cached_events,
@@ -689,23 +707,22 @@ class TestCacheBehaviour:
                 result = svc.get_cached_events_or_refresh_on_miss(sub)
                 mock_refresh.assert_not_called()
 
-        assert result is cached_events
+        assert len(result) == 1
+        assert result[0].id == 'sub_907_1'
         svc.invalidate_cache(sub.id)
 
-    def test_get_cached_events_or_refresh_on_miss_refreshes_on_cold_miss(self, app):
-        """The warmup helper refreshes synchronously when no cache entry exists."""
+    def test_get_cached_events_or_refresh_on_miss_refreshes_on_cold_miss(self, app, db, test_user):
+        """The warmup helper does not block UI paths on cold miss."""
         from app.services import calendar_subscriptions as svc
 
-        sub = self._make_sub(sub_id=908)
+        sub = self._make_sub(db, test_user, sub_id=908)
         svc.invalidate_cache(sub.id)
         with app.app_context():
-            with patch.object(
-                svc, 'refresh_subscription_events', return_value=['fresh']
-            ) as mock_refresh:
+            with patch.object(svc, 'refresh_subscription_events') as mock_refresh:
                 result = svc.get_cached_events_or_refresh_on_miss(sub)
 
-        mock_refresh.assert_called_once_with(sub, force=True)
-        assert result == ['fresh']
+        mock_refresh.assert_not_called()
+        assert result == []
 
 
 # ===========================================================================
@@ -740,8 +757,9 @@ class TestMergedEventDisplay:
             )
             with patch.object(svc, 'get_user_calendar_subscriptions',
                               return_value=[MagicMock(id=1)]):
-                with patch.object(svc, 'get_cached_subscription_events',
-                                  return_value=[sub_ev]):
+                with patch.object(svc, 'get_cached_events_stale_ok',
+                                  return_value=[sub_ev]), \
+                     patch.object(svc, 'is_cache_stale', return_value=False):
                     events = svc.get_all_display_events_for_user(test_user)
 
         titles = [e.title for e in events]
@@ -761,7 +779,7 @@ class TestMergedEventDisplay:
 
             with patch.object(svc, 'get_user_calendar_subscriptions',
                               return_value=[broken_sub]):
-                with patch.object(svc, 'get_cached_subscription_events',
+                with patch.object(svc, 'get_cached_events_stale_ok',
                                   side_effect=Exception('boom')):
                     events = svc.get_all_display_events_for_user(test_user)
 
@@ -795,7 +813,7 @@ class TestEventsPageWithSubscriptions:
         )
         with patch.object(svc, 'get_user_calendar_subscriptions',
                           return_value=[MagicMock(id=2)]):
-            with patch.object(svc, 'get_cached_events_or_refresh_on_miss',
+            with patch.object(svc, 'get_cached_events_stale_ok',
                               return_value=[sub_ev]), \
                  patch.object(svc, 'is_cache_stale', return_value=False):
                 resp = auth_client.get('/events/?view=upcoming')

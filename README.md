@@ -16,7 +16,7 @@ A self-hosted personal command center PWA for tasks, notes, reminders, events, b
 - **Notes** — write and organize notes with tags and pinning; includes quick scratchpad
 - **Reminders** — time-based alerts with snooze support
 - **Events** — calendar events with start/end times and location
-- **Calendar Subscriptions** — subscribe to external ICS/iCal feeds; remote events are fetched server-side, cached with a configurable TTL, and merged into the Events page with a "Subscribed" badge
+- **Calendar Subscriptions** — subscribe to external ICS/iCal feeds or CalDAV calendars; remote events are fetched server-side, cached with a configurable TTL, and merged into the Events page with a "Subscribed" badge
 - **Bookmarks** — save, categorize, and pin URLs with optional descriptions; search across title, URL, and description; filter by category; import/export via Netscape bookmark HTML
 - **Focus Mode** — distraction-free view for deep work
 - **TOTP 2FA** — optional two-factor authentication with recovery codes
@@ -220,14 +220,31 @@ All endpoints require an authenticated session. Responses are JSON.
 
 ### Calendar Subscriptions
 
-HelmHub can subscribe to external ICS/iCal calendar feeds and merge their events into the Events page alongside your local events.
+HelmHub can subscribe to external ICS/iCal calendar feeds and CalDAV calendar servers, merging their events into the Events page alongside your local events.
 
-- **Add a subscription**: Go to **Settings → Calendar Subscriptions** and enter a name and the ICS feed URL.
+#### ICS / iCal subscriptions
+
+- **Add a subscription**: Go to **Settings → Calendar Subscriptions**, choose **ICS / iCal feed**, and enter a name and the feed URL.
+- Accepts `https://`, `http://`, and `webcal://` URLs.
+- Works with any calendar that publishes a standard `.ics` feed (Google Calendar, iCloud, Outlook, etc.).
+
+#### CalDAV subscriptions
+
+- **Add a subscription**: Go to **Settings → Calendar Subscriptions**, choose **CalDAV**, and enter the calendar URL, username, and password.
+- **Password storage**: CalDAV passwords are encrypted at rest using Fernet symmetric encryption (same key as `TOTP_ENCRYPTION_KEY`). The plaintext password is never written to the database or logged.
+- HelmHub fetches events via a `REPORT calendar-query` request with a date-range filter, then falls back to `PROPFIND Depth: 1` for servers that do not support `REPORT`.
+- Compatible with standard CalDAV servers such as Nextcloud, Radicale, Baikal, Apple iCloud (CalDAV), FastMail, and others.
+- Accepts `https://` and `http://` URLs. Use the full path to the specific calendar collection (e.g. `https://nextcloud.example.com/remote.php/dav/calendars/user/personal/`).
+
+#### Common to both types
+
 - **Event display**: Subscribed events appear on the Events page with a **Subscribed** badge and cannot be edited or deleted from within HelmHub.
-- **Server-side fetch**: Feeds are fetched by the server (not the browser), so private feeds behind authentication are supported via the URL.
-- **TTL cache**: Fetched feeds are cached in memory for `CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES` (default 30 minutes). Stale cached data is served if a re-fetch fails, preventing disruption from temporary outages.
-- **Lookahead window**: Only events within `CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS` (default 60 days) from today are imported per feed.
-- **Event cap**: At most `CALENDAR_SUBSCRIPTION_MAX_EVENTS` (default 500) events are imported per feed to guard against oversized feeds.
+- **Read-only**: All subscription events are read-only regardless of type.
+- **Server-side fetch**: Feeds are fetched by the server (not the browser). Credentials and URLs are never exposed to the browser.
+- **TTL cache**: Fetched events are cached in the database for `CALENDAR_SUBSCRIPTION_DEFAULT_TTL_MINUTES` (default 30 minutes). Stale cached data is served if a re-fetch fails, preventing disruption from temporary outages.
+- **Lookahead window**: Only events within `CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS` (default 60 days) from today are imported per subscription.
+- **Event cap**: At most `CALENDAR_SUBSCRIPTION_MAX_EVENTS` (default 500) events are imported per subscription.
+- **SSRF protection**: All outbound requests (including every redirect hop) are checked against a blocklist of private, loopback, and link-local address ranges so that subscriptions cannot be used to probe internal infrastructure.
 
 ---
 
@@ -282,7 +299,8 @@ Tests use an in-memory SQLite database with CSRF and rate limiting disabled. No 
 | Tasks | `tests/test_tasks.py` | CRUD, completion toggle, pin, filtering |
 | Notes | `tests/test_notes.py` | CRUD, pin, search, scratchpad |
 | Bookmarks | `tests/test_bookmarks.py` | Model properties, CRUD, pin toggle, search/filter, HTMX responses |
-| Calendar Subscriptions | `tests/test_calendar_subscriptions.py` | CRUD routes, ICS fetch/parse, TTL cache, event merge, access control |
+| Calendar Subscriptions (ICS) | `tests/test_calendar_subscriptions.py` | CRUD routes, ICS fetch/parse, TTL cache, event merge, access control |
+| Calendar Subscriptions (CalDAV) | `tests/test_caldav_subscriptions.py` | CalDAV CRUD, password encryption, REPORT/PROPFIND fetch, XML parsing, dispatch, SSRF protection |
 
 ---
 

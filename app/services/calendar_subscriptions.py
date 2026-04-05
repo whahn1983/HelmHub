@@ -339,6 +339,54 @@ _DAV_NS = 'DAV:'
 _CALDAV_NS = 'urn:ietf:params:xml:ns:caldav'
 
 
+_CALDAV_MAX_REDIRECTS = 10
+
+
+def _caldav_request_safe(
+    method: str,
+    url: str,
+    auth,
+    headers: dict,
+    timeout: int,
+    body: Optional[bytes] = None,
+) -> requests.Response:
+    """
+    Issue a single CalDAV/WebDAV HTTP request with manual redirect following
+    and per-hop SSRF protection.
+
+    Every redirect target is SSRF-checked before the next request is issued,
+    matching the same strategy used by :func:`fetch_calendar_feed`.
+
+    Raises ``ValueError`` for SSRF violations and
+    ``requests.RequestException`` for network/HTTP errors.
+    """
+    _assert_ssrf_safe(url)
+    current_url = url
+
+    for _ in range(_CALDAV_MAX_REDIRECTS + 1):
+        resp = requests.request(
+            method,
+            current_url,
+            data=body,
+            headers=headers,
+            auth=auth,
+            timeout=timeout,
+            allow_redirects=False,
+        )
+        if resp.is_redirect:
+            location = resp.headers.get('Location', '')
+            if not location:
+                break
+            current_url = urljoin(current_url, location)
+            _assert_ssrf_safe(current_url)
+        else:
+            return resp
+
+    raise requests.TooManyRedirects(
+        f'Exceeded {_CALDAV_MAX_REDIRECTS} redirects for {url}'
+    )
+
+
 def fetch_caldav_events(
     subscription,
     lookahead_days: int = _DEFAULT_LOOKAHEAD_DAYS,
@@ -351,7 +399,8 @@ def fetch_caldav_events(
     the display window.  Falls back to a plain ``PROPFIND Depth: 1`` if the
     server does not support REPORT (405/501).
 
-    SSRF protection is applied before every outbound request.
+    SSRF protection is applied before every outbound request, including each
+    redirect hop, so server-controlled redirects cannot reach internal hosts.
 
     Raises ``requests.RequestException`` on network/HTTP errors and
     ``ValueError`` for protocol-level failures.
@@ -359,8 +408,6 @@ def fetch_caldav_events(
     url = subscription.url
     username = subscription.caldav_username or ''
     password = subscription.caldav_password or ''
-
-    _assert_ssrf_safe(url)
 
     timeout = current_app.config.get(
         'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', _DEFAULT_TIMEOUT_SECONDS
@@ -393,26 +440,20 @@ def fetch_caldav_events(
         'User-Agent': 'HelmHub-CalendarSubscription/1.0',
     }
 
-    # Try REPORT first (standard CalDAV calendar-query)
-    try:
-        response = requests.request(
-            'REPORT',
-            url,
-            data=query_xml.encode('utf-8'),
-            headers=headers,
-            auth=auth,
-            timeout=timeout,
-            allow_redirects=True,
-        )
-        if response.status_code in (405, 501):
-            # Server does not support REPORT; fall back to PROPFIND
-            response = _caldav_propfind(url, auth, headers, timeout)
-        else:
-            response.raise_for_status()
-    except requests.RequestException:
-        raise
+    # Try REPORT first (standard CalDAV calendar-query).  SSRF is checked
+    # at every redirect hop inside _caldav_request_safe.
+    response = _caldav_request_safe(
+        'REPORT', url, auth, headers, timeout,
+        body=query_xml.encode('utf-8'),
+    )
 
-    ics_blobs = _parse_multistatus_calendar_data(response.text)
+    if response.status_code in (405, 501):
+        # Server does not support REPORT; fall back to PROPFIND
+        ics_blobs = _caldav_propfind(url, auth, headers, timeout)
+    else:
+        response.raise_for_status()
+        ics_blobs = _parse_multistatus_calendar_data(response.text)
+
     if not ics_blobs:
         logger.info(
             'CalDAV REPORT for subscription %s returned no calendar objects',
@@ -424,9 +465,10 @@ def fetch_caldav_events(
     latest_modified: Optional[datetime] = None
 
     for blob in ics_blobs:
+        blob_bytes = blob.encode('utf-8') if isinstance(blob, str) else blob
         try:
             blob_events = parse_ics_events(
-                blob.encode('utf-8') if isinstance(blob, str) else blob,
+                blob_bytes,
                 subscription,
                 lookahead_days=lookahead_days,
             )
@@ -435,9 +477,7 @@ def fetch_caldav_events(
                     seen_ids.add(ev.id)
                     events.append(ev)
             # Track latest source modification from ICS blobs
-            mod = _extract_ics_last_modified(
-                blob.encode('utf-8') if isinstance(blob, str) else blob
-            )
+            mod = _extract_ics_last_modified(blob_bytes)
             if mod and (latest_modified is None or mod > latest_modified):
                 latest_modified = mod
         except Exception as exc:
@@ -456,14 +496,17 @@ def _caldav_propfind(
     auth,
     base_headers: dict,
     timeout: int,
-) -> requests.Response:
+) -> list[str]:
     """
-    Issue a PROPFIND Depth: 1 to list calendar objects, then fetch each one.
+    Issue a ``PROPFIND Depth: 1`` to list calendar objects, then fetch each
+    one and return the raw ICS text blobs.
 
-    Used as a fallback when the server does not support calendar-query REPORT.
-    Returns a synthetic multi-status-like response object whose ``.text``
-    attribute contains concatenated ICS blobs wrapped in minimal XML so that
-    :func:`_parse_multistatus_calendar_data` can parse it.
+    Used as a fallback when the server does not support ``calendar-query``
+    REPORT (405/501).  Every request, including each individual ``.ics``
+    object fetch, uses :func:`_caldav_request_safe` so that server-controlled
+    redirects cannot bypass SSRF protection.
+
+    Returns a list of raw ICS strings (one per calendar object).
     """
     propfind_body = (
         '<?xml version="1.0" encoding="utf-8"?>'
@@ -474,47 +517,27 @@ def _caldav_propfind(
     headers = dict(base_headers)
     headers['Depth'] = '1'
 
-    _assert_ssrf_safe(url)
-    resp = requests.request(
-        'PROPFIND',
-        url,
-        data=propfind_body.encode('utf-8'),
-        headers=headers,
-        auth=auth,
-        timeout=timeout,
-        allow_redirects=True,
+    resp = _caldav_request_safe(
+        'PROPFIND', url, auth, headers, timeout,
+        body=propfind_body.encode('utf-8'),
     )
     resp.raise_for_status()
 
-    # Collect hrefs that look like .ics resources
     hrefs = _extract_ics_hrefs(resp.text, url)
 
-    # Build a synthetic XML container so _parse_multistatus_calendar_data works
-    parts = ['<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">']
+    ics_blobs: list[str] = []
+    get_headers = {'User-Agent': base_headers['User-Agent']}
     for href in hrefs[:500]:  # cap to avoid runaway
-        _assert_ssrf_safe(href)
         try:
-            r = requests.get(
-                href, headers={'User-Agent': base_headers['User-Agent']},
-                auth=auth, timeout=timeout, allow_redirects=True,
+            r = _caldav_request_safe(
+                'GET', href, auth, get_headers, timeout,
             )
             if r.status_code == 200 and r.text.strip():
-                safe_data = r.text.replace(']]>', ']]]]><![CDATA[>')
-                parts.append(
-                    '<D:response><D:propstat><D:prop>'
-                    f'<C:calendar-data><![CDATA[{safe_data}]]></C:calendar-data>'
-                    '</D:prop></D:propstat></D:response>'
-                )
+                ics_blobs.append(r.text)
         except Exception as exc:
             logger.debug('Could not fetch CalDAV object %s: %s', href, exc)
 
-    parts.append('</D:multistatus>')
-
-    # Wrap in a fake Response-like object
-    class _FakeResponse:
-        text = '\n'.join(parts)
-
-    return _FakeResponse()
+    return ics_blobs
 
 
 def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:

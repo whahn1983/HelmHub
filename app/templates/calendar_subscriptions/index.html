@@ -68,7 +68,11 @@
                 {% if sub.last_refresh_status == 'ok' %}
                   <span style="color: var(--color-success);">OK</span>
                   {% if sub.last_refresh_detail %}
-                    — {{ sub.last_refresh_detail | e }}
+                    {% set display_detail = sub.last_refresh_detail %}
+                    {% if display_detail[:5] == 'OK — ' %}
+                      {% set display_detail = display_detail[5:] %}
+                    {% endif %}
+                    — {{ display_detail | e }}
                   {% endif %}
                   {% if sub.last_source_modified_at %}
                     — source modified:

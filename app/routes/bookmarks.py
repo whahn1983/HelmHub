@@ -7,7 +7,9 @@ Supports both full-page and HTMX partial responses.
 Bookmark model fields: title, url, description, category (tag string), pinned.
 """
 
+import ipaddress
 import re
+import socket
 import time
 import urllib.request
 import urllib.error
@@ -157,6 +159,54 @@ _PRIVATE_HOST_RE = re.compile(
 )
 
 
+def _is_private_ip(ip_str: str) -> bool:
+    """Return True if *ip_str* is a private, loopback, link-local, or reserved address."""
+    try:
+        addr = ipaddress.ip_address(ip_str)
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        )
+    except ValueError:
+        return True  # Fail safe
+
+
+def _host_resolves_to_private(hostname: str) -> bool:
+    """
+    Resolve *hostname* via DNS and return True if ANY resolved IP is private/internal.
+
+    Returns True on resolution failures to fail closed.
+    """
+    try:
+        results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+        if not results:
+            return True
+        for result in results:
+            if _is_private_ip(result[4][0]):
+                return True
+        return False
+    except socket.gaierror:
+        return True
+
+
+class _SSRFAwareRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Redirect handler that blocks redirects to private/internal hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urlparse(newurl)
+        host = parsed.hostname or ''
+        if _PRIVATE_HOST_RE.match(host) or _host_resolves_to_private(host):
+            raise urllib.error.URLError(f'Redirect to private host blocked: {host}')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_ssrf_opener = urllib.request.build_opener(_SSRFAwareRedirectHandler())
+
+
 def _probe_direct_favicon(domain: str) -> bool:
     """Return True when the direct favicon URL appears reachable.
 
@@ -169,7 +219,7 @@ def _probe_direct_favicon(domain: str) -> bool:
             method='GET',
             headers={'User-Agent': 'Mozilla/5.0 HelmHub/1.0'},
         )
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        with _ssrf_opener.open(req, timeout=2) as resp:
             return resp.status < 400
     except urllib.error.HTTPError:
         # Site explicitly rejected favicon request.
@@ -188,7 +238,7 @@ def _download_favicon(url: str) -> tuple[bytes, str] | None:
             method='GET',
             headers={'User-Agent': 'Mozilla/5.0 HelmHub/1.0'},
         )
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        with _ssrf_opener.open(req, timeout=3) as resp:
             if resp.status >= 400:
                 return None
             content = resp.read()
@@ -441,7 +491,9 @@ def favicon_proxy():
         abort(400)
 
     host = domain.split(':')[0]
-    if _PRIVATE_HOST_RE.match(host):
+    # Block obvious private hostnames by pattern, then enforce post-resolution
+    # IP checks to prevent DNS rebinding attacks.
+    if _PRIVATE_HOST_RE.match(host) or _host_resolves_to_private(host):
         abort(400)
 
     now = time.time()

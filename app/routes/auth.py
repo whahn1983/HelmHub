@@ -74,6 +74,7 @@ def login():
 # ---------------------------------------------------------------------------
 
 @auth_bp.route('/totp', methods=['GET', 'POST'])
+@limiter.limit('10 per minute')
 def totp():
     """Second factor verification step (TOTP token or recovery code)."""
     user_id = session.get('pending_totp_user_id')

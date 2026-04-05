@@ -18,12 +18,14 @@ Remote feeds are fetched in background worker threads and written to the
 ``subscription_events`` table.
 """
 
+import ipaddress
 import logging
+import socket
 import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import requests
 from flask import current_app
@@ -204,6 +206,10 @@ def fetch_calendar_feed(url: str) -> bytes:
     if url.lower().startswith('webcal://'):
         url = 'https://' + url[9:]
 
+    # SSRF guard: reject URLs resolving to private/internal hosts before
+    # making any outbound request.
+    _assert_ssrf_safe(url)
+
     timeout = current_app.config.get(
         'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', _DEFAULT_TIMEOUT_SECONDS
     )
@@ -213,7 +219,26 @@ def fetch_calendar_feed(url: str) -> bytes:
         'Accept': 'text/calendar, application/ics, */*',
     }
 
-    response = requests.get(url, timeout=timeout, headers=headers)
+    # Follow redirects manually so every hop is checked for SSRF before the
+    # next request is issued (hooks fire too late with allow_redirects=True).
+    _MAX_REDIRECTS = 10
+    current_url = url
+    response = None
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = requests.get(
+            current_url, timeout=timeout, headers=headers, allow_redirects=False
+        )
+        if response.is_redirect:
+            location = response.headers.get('Location', '')
+            if not location:
+                break
+            current_url = urljoin(current_url, location)
+            _assert_ssrf_safe(current_url)
+        else:
+            break
+    else:
+        raise requests.TooManyRedirects(f'Exceeded {_MAX_REDIRECTS} redirects for {url}')
+
     response.raise_for_status()
 
     content = response.content
@@ -793,6 +818,65 @@ def get_all_display_events_for_user(
 
 
 # ---------------------------------------------------------------------------
+# SSRF protection helpers
+# ---------------------------------------------------------------------------
+
+def _is_private_ip(ip_str: str) -> bool:
+    """Return True if the IP address is private, loopback, link-local, or otherwise reserved."""
+    try:
+        addr = ipaddress.ip_address(ip_str)
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        )
+    except ValueError:
+        return True  # Fail safe: treat unparseable as unsafe
+
+
+def _host_resolves_to_private(hostname: str) -> bool:
+    """
+    Resolve *hostname* and return True if ANY resolved address is private/internal.
+
+    Returns True (unsafe) on DNS failures to fail closed.
+    """
+    try:
+        results = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+        if not results:
+            return True
+        for result in results:
+            if _is_private_ip(result[4][0]):
+                return True
+        return False
+    except socket.gaierror:
+        return True  # Unresolvable host — block
+
+
+def _assert_ssrf_safe(url: str) -> None:
+    """
+    Raise ``ValueError`` if *url* targets a private/internal host.
+
+    Should be called immediately before any server-side HTTP request.
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ''
+    except Exception:
+        raise ValueError('Invalid URL.')
+
+    if not hostname:
+        raise ValueError('URL has no hostname.')
+
+    if _host_resolves_to_private(hostname):
+        raise ValueError(
+            f'URL hostname "{hostname}" resolves to a private or internal address.'
+        )
+
+
+# ---------------------------------------------------------------------------
 # URL validation helper
 # ---------------------------------------------------------------------------
 
@@ -819,5 +903,9 @@ def validate_subscription_url(url: str) -> Optional[str]:
 
     if not parsed.netloc:
         return 'URL must include a hostname.'
+
+    hostname = parsed.hostname or ''
+    if _host_resolves_to_private(hostname):
+        return 'URL must not point to a private or internal network address.'
 
     return None

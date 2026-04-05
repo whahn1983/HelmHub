@@ -29,21 +29,21 @@ class CaldavFetchResult:
     calendar_name: Optional[str] = None
 
 
-def _import_caldav() -> tuple[object, object]:
+def _import_caldav():
     """Import caldav lazily so the app can still boot without the package."""
     try:
         import caldav
-        from caldav.objects import Calendar
     except ImportError as exc:
         raise RuntimeError(
-            'CalDAV support requires the "caldav" package to be installed.'
+            'CalDAV support requires the "caldav" package to be installed. '
+            'Run: pip install caldav'
         ) from exc
-    return caldav, Calendar
+    return caldav
 
 
 def build_caldav_client(subscription):
     """Create an authenticated ``caldav.DAVClient`` for a subscription."""
-    caldav, _ = _import_caldav()
+    caldav = _import_caldav()
 
     timeout = current_app.config.get(
         'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', 120
@@ -64,13 +64,13 @@ def _looks_like_calendar_collection_url(url: str) -> bool:
 
 def resolve_caldav_calendar(subscription, client=None) -> CaldavResolutionResult:
     """Resolve the concrete calendar object using either direct URL or discovery."""
-    _, Calendar = _import_caldav()
+    caldav = _import_caldav()
 
     client = client or build_caldav_client(subscription)
     configured_url = (subscription.url or '').strip()
 
     if _looks_like_calendar_collection_url(configured_url):
-        calendar = Calendar(client=client, url=configured_url)
+        calendar = caldav.Calendar(client=client, url=configured_url)
         return CaldavResolutionResult(
             calendar=calendar,
             resolved_calendar_url=getattr(calendar, 'url', configured_url),

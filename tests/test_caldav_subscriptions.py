@@ -1,8 +1,12 @@
 """Tests for CalDAV subscription behavior using the high-level caldav service."""
 
+import builtins
+import sys
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.models.calendar_subscription import CalendarSubscription
 from app.models.subscription_event import SubscriptionEvent as SubscriptionEventRow
@@ -65,9 +69,10 @@ class TestCaldavLibraryService:
         fake_calendar.date_search.return_value = [SimpleNamespace(data=TIMED_EVENT_ICS)]
 
         FakeCalendarClass = MagicMock(return_value=fake_calendar)
+        fake_caldav_module = MagicMock(Calendar=FakeCalendarClass)
 
         with app.app_context():
-            with patch.object(svc, '_import_caldav', return_value=(MagicMock(), FakeCalendarClass)):
+            with patch.object(svc, '_import_caldav', return_value=fake_caldav_module):
                 result = svc.fetch_caldav_events(
                     sub,
                     start=datetime(2099, 1, 1),
@@ -108,7 +113,7 @@ class TestCaldavLibraryService:
         client.principal.return_value = principal
 
         with app.app_context():
-            with patch.object(svc, '_import_caldav', return_value=(MagicMock(), MagicMock())):
+            with patch.object(svc, '_import_caldav', return_value=MagicMock()):
                 resolution = svc.resolve_caldav_calendar(sub, client=client)
 
         assert resolution.calendar is target_calendar
@@ -146,6 +151,55 @@ class TestCaldavLibraryService:
         assert all_day.all_day is True
 
 
+class TestCaldavLazyImport:
+    def test_import_caldav_succeeds_when_installed(self, monkeypatch):
+        from app.services import caldav_subscriptions as svc
+
+        fake_caldav = SimpleNamespace(DAVClient=object())
+        monkeypatch.setitem(sys.modules, 'caldav', fake_caldav)
+        monkeypatch.delitem(sys.modules, 'caldav.objects', raising=False)
+
+        imported = svc._import_caldav()
+
+        assert imported is fake_caldav
+
+    def test_import_caldav_raises_runtime_error_when_missing(self, monkeypatch):
+        from app.services import caldav_subscriptions as svc
+
+        monkeypatch.delitem(sys.modules, 'caldav', raising=False)
+        monkeypatch.delitem(sys.modules, 'caldav.objects', raising=False)
+        real_import = builtins.__import__
+
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == 'caldav':
+                raise ImportError('missing caldav')
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, '__import__', guarded_import)
+
+        with pytest.raises(RuntimeError, match=r'Run: pip install caldav'):
+            svc._import_caldav()
+
+    def test_import_caldav_does_not_import_caldav_objects(self, monkeypatch):
+        from app.services import caldav_subscriptions as svc
+
+        fake_caldav = SimpleNamespace(DAVClient=object())
+        monkeypatch.setitem(sys.modules, 'caldav', fake_caldav)
+        monkeypatch.delitem(sys.modules, 'caldav.objects', raising=False)
+        real_import = builtins.__import__
+
+        def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == 'caldav.objects':
+                raise AssertionError('caldav.objects should not be imported')
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, '__import__', guarded_import)
+
+        imported = svc._import_caldav()
+
+        assert imported is fake_caldav
+
+
 class TestRefreshAndStatusBehavior:
     def test_missing_caldav_package_uses_http_fallback(self, app, db, test_user):
         from app.services import calendar_subscriptions as svc
@@ -160,7 +214,8 @@ class TestRefreshAndStatusBehavior:
             with patch(
                 'app.services.caldav_subscriptions.refresh_caldav_subscription',
                 side_effect=RuntimeError(
-                    'CalDAV support requires the "caldav" package to be installed.'
+                    'CalDAV support requires the "caldav" package to be installed. '
+                    'Run: pip install caldav'
                 ),
             ):
                 with patch.object(

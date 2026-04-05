@@ -211,13 +211,12 @@
       </svg>
       <span>Dashboard</span>
     </a>
-    <a href="/tasks?view=today" class="bottom-nav-item {% if request.path == '/tasks' and request.args.get('view') == 'today' %}active{% endif %}" aria-label="Today">
+    <a href="/events" class="bottom-nav-item {% if request.path.startswith('/events') %}active{% endif %}" aria-label="Events">
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <rect x="2" y="3" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.75"/>
         <path d="M6 1v4M14 1v4M2 8h16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-        <path d="M6 12h1M10 12h1M14 12h1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
-      <span>Today</span>
+      <span>Events</span>
     </a>
     <a href="/tasks" class="bottom-nav-item {% if request.path == '/tasks' and not request.args.get('view') %}active{% endif %}" aria-label="Tasks">
       <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true">

@@ -159,6 +159,13 @@ def _merge_subscription_events(
             current_app.config.get('CALENDAR_SUBSCRIPTION_VIEW_MAX_EVENTS', 200)
         )
 
+        lookback_start = now - timedelta(days=1)
+        lookahead_end = now + timedelta(
+            days=int(current_app.config.get(
+                'CALENDAR_SUBSCRIPTION_LOOKAHEAD_DAYS', 60
+            ))
+        )
+
         for sub in subscriptions:
             try:
                 events = get_cached_events_stale_ok(sub)
@@ -171,12 +178,17 @@ def _merge_subscription_events(
                 for ev in events:
                     if ev.start_at is None:
                         continue
+                    if not (ev.title or '').strip():
+                        continue
                     if view == 'today':
                         if not (today_start <= ev.start_at < today_end):
                             continue
                     elif view == 'upcoming':
                         if not (ev.start_at >= now and ev.start_at < week_end):
                             continue
+                    elif not (lookback_start <= ev.start_at <= lookahead_end):
+                        # Guard against stale or malformed cached rows.
+                        continue
                     sub_events.append(ev)
                     used += 1
                     if used >= per_subscription_limit:

@@ -24,6 +24,7 @@ from app.models.calendar_subscription import CalendarSubscription
 from app.services.calendar_subscriptions import (
     invalidate_cache,
     refresh_subscription_events_background,
+    validate_caldav_url,
     validate_subscription_url,
 )
 
@@ -50,7 +51,11 @@ def _sub_or_404(sub_id: int) -> CalendarSubscription:
     return sub
 
 
-def _parse_sub_form(form, existing_url: str = '') -> tuple[dict, list[str]]:
+def _parse_sub_form(
+    form,
+    existing_url: str = '',
+    existing_caldav_password_enc: str = '',
+) -> tuple[dict, list[str]]:
     """
     Parse and validate the add/edit subscription form.
 
@@ -62,6 +67,9 @@ def _parse_sub_form(form, existing_url: str = '') -> tuple[dict, list[str]]:
         For edit operations, the current URL stored in the database.
         When the form URL field is left blank, this value is kept
         instead of reporting a validation error.
+    existing_caldav_password_enc:
+        For CalDAV edit operations, the currently stored encrypted password.
+        When the form password field is left blank, this value is kept.
 
     Returns ``(data_dict, errors_list)``.
     """
@@ -73,17 +81,39 @@ def _parse_sub_form(form, existing_url: str = '') -> tuple[dict, list[str]]:
     elif len(name) > 255:
         errors.append('Name must be 255 characters or fewer.')
 
+    subscription_type = form.get('subscription_type', 'ics')
+    if subscription_type not in ('ics', 'caldav'):
+        subscription_type = 'ics'
+
     url = form.get('url', '').strip()
     if not url and existing_url:
-        # On edit, a blank URL field means "keep existing URL"
         url = existing_url
-    url_error = validate_subscription_url(url)
+
+    if subscription_type == 'caldav':
+        url_error = validate_caldav_url(url)
+    else:
+        url_error = validate_subscription_url(url)
+        # Normalise webcal:// → https://
+        if url.lower().startswith('webcal://'):
+            url = 'https://' + url[9:]
     if url_error:
         errors.append(url_error)
 
-    # Normalise webcal:// → https://
-    if url.lower().startswith('webcal://'):
-        url = 'https://' + url[9:]
+    # CalDAV credentials
+    caldav_username = None
+    caldav_password = None  # plaintext; caller encrypts before saving
+    caldav_password_enc = existing_caldav_password_enc  # keep existing by default
+    if subscription_type == 'caldav':
+        caldav_username = form.get('caldav_username', '').strip() or None
+        if caldav_username is None:
+            errors.append('CalDAV username is required.')
+        pwd_raw = form.get('caldav_password', '')
+        if pwd_raw:
+            # New password provided — will be encrypted by the route
+            caldav_password = pwd_raw
+            caldav_password_enc = None  # signal to route: use plaintext field
+        elif not existing_caldav_password_enc:
+            errors.append('CalDAV password is required.')
 
     color = form.get('color', '').strip() or None
     if color and len(color) > 32:
@@ -105,6 +135,10 @@ def _parse_sub_form(form, existing_url: str = '') -> tuple[dict, list[str]]:
     data = {
         'name': name,
         'url': url,
+        'subscription_type': subscription_type,
+        'caldav_username': caldav_username,
+        'caldav_password': caldav_password,       # plaintext or None
+        'caldav_password_enc': caldav_password_enc,  # keep existing if no new pwd
         'color': color,
         'enabled': enabled,
         'cache_ttl_minutes': cache_ttl_minutes,
@@ -154,10 +188,14 @@ def new():
             user_id=current_user.id,
             name=data['name'],
             url=data['url'],
+            subscription_type=data['subscription_type'],
+            caldav_username=data['caldav_username'],
             color=data['color'],
             enabled=data['enabled'],
             cache_ttl_minutes=data['cache_ttl_minutes'],
         )
+        if data['caldav_password']:
+            sub.caldav_password = data['caldav_password']
         db.session.add(sub)
         db.session.commit()
 
@@ -182,7 +220,11 @@ def edit(sub_id: int):
     sub = _sub_or_404(sub_id)
 
     if request.method == 'POST':
-        data, errors = _parse_sub_form(request.form, existing_url=sub.url)
+        data, errors = _parse_sub_form(
+            request.form,
+            existing_url=sub.url,
+            existing_caldav_password_enc=sub.caldav_password_enc or '',
+        )
 
         if errors:
             for msg in errors:
@@ -198,9 +240,21 @@ def edit(sub_id: int):
 
         sub.name = data['name']
         sub.url = data['url']
+        sub.subscription_type = data['subscription_type']
+        sub.caldav_username = data['caldav_username']
         sub.color = data['color']
         sub.enabled = data['enabled']
         sub.cache_ttl_minutes = data['cache_ttl_minutes']
+
+        # Update password only when a new one was provided; otherwise keep
+        # the existing encrypted value untouched.
+        if data['caldav_password']:
+            sub.caldav_password = data['caldav_password']
+        elif data['subscription_type'] != 'caldav':
+            # Switched away from CalDAV — clear credentials
+            sub.caldav_username = None
+            sub.caldav_password_enc = None
+
         db.session.commit()
 
         # Invalidate cache when URL changes so the new feed is fetched fresh

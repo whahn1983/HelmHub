@@ -14,20 +14,26 @@
 #}
 {% if form is mapping %}
   {% set fv_name  = form.get('name', '') %}
+  {% set fv_type  = form.get('subscription_type', 'ics') %}
   {% set fv_url   = form.get('url', '') %}
+  {% set fv_caldav_username = form.get('caldav_username', '') %}
   {% set fv_color = form.get('color', '') %}
   {% set fv_ttl   = form.get('cache_ttl_minutes', '') %}
   {% set fv_enabled = form.get('enabled', 'on') != 'off' %}
 {% elif subscription %}
   {% set fv_name  = subscription.name %}
+  {% set fv_type  = subscription.subscription_type %}
   {# URL intentionally left blank on GET — user must re-confirm to save #}
   {% set fv_url   = '' %}
+  {% set fv_caldav_username = subscription.caldav_username or '' %}
   {% set fv_color = subscription.color or '' %}
   {% set fv_ttl   = subscription.cache_ttl_minutes or '' %}
   {% set fv_enabled = subscription.enabled %}
 {% else %}
   {% set fv_name  = '' %}
+  {% set fv_type  = 'ics' %}
   {% set fv_url   = '' %}
+  {% set fv_caldav_username = '' %}
   {% set fv_color = '' %}
   {% set fv_ttl   = '' %}
   {% set fv_enabled = true %}
@@ -39,6 +45,7 @@
       method="post"
       action="{{ '/calendar-subscriptions/' ~ subscription.id ~ '/edit' if subscription else '/calendar-subscriptions/new' }}"
       novalidate
+      id="sub-form"
     >
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
@@ -70,10 +77,43 @@
         >
       </div>
 
+      <!-- Subscription type -->
+      <div class="form-group">
+        <label class="form-label">Subscription type</label>
+        <div style="display: flex; gap: var(--space-4);">
+          <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+            <input
+              type="radio"
+              name="subscription_type"
+              value="ics"
+              id="type-ics"
+              {% if fv_type != 'caldav' %}checked{% endif %}
+            >
+            ICS / iCal feed
+          </label>
+          <label style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+            <input
+              type="radio"
+              name="subscription_type"
+              value="caldav"
+              id="type-caldav"
+              {% if fv_type == 'caldav' %}checked{% endif %}
+            >
+            CalDAV
+          </label>
+        </div>
+        <p class="form-hint">
+          ICS feeds are public URLs (.ics file).
+          CalDAV connects directly to a calendar server using credentials.
+        </p>
+      </div>
+
       <!-- URL -->
       <div class="form-group">
         <label for="sub-url" class="form-label">
-          Subscription URL <span aria-hidden="true" style="color: var(--color-danger);">*</span>
+          <span id="url-label-ics">Subscription URL</span>
+          <span id="url-label-caldav" style="display:none;">CalDAV Calendar URL</span>
+          <span aria-hidden="true" style="color: var(--color-danger);">*</span>
           {% if subscription %}
             <span style="font-weight: normal; opacity: 0.65;">(leave blank to keep existing)</span>
           {% endif %}
@@ -89,11 +129,61 @@
           autocomplete="off"
           spellcheck="false"
         >
-        <p class="form-hint">
+        <p class="form-hint" id="url-hint-ics">
           Accepts <code>https://</code>, <code>http://</code>, and <code>webcal://</code> URLs.
           The URL is stored server-side only and never sent to the browser.
         </p>
+        <p class="form-hint" id="url-hint-caldav" style="display:none;">
+          Enter the full URL of the CalDAV calendar (e.g.
+          <code>https://caldav.example.com/calendars/user/calendar/</code>).
+          The URL is stored server-side only and never sent to the browser.
+        </p>
       </div>
+
+      <!-- CalDAV credentials (shown only when type = caldav) -->
+      <div id="caldav-fields" style="display:none;">
+
+        <div class="form-group">
+          <label for="caldav-username" class="form-label">
+            CalDAV username <span aria-hidden="true" style="color: var(--color-danger);">*</span>
+          </label>
+          <input
+            type="text"
+            id="caldav-username"
+            name="caldav_username"
+            class="form-control"
+            value="{{ fv_caldav_username | e }}"
+            placeholder="user@example.com"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="caldav-password" class="form-label">
+            CalDAV password <span aria-hidden="true" style="color: var(--color-danger);">*</span>
+            {% if subscription and subscription.caldav_password_enc %}
+              <span style="font-weight: normal; opacity: 0.65;">(leave blank to keep existing)</span>
+            {% endif %}
+          </label>
+          <input
+            type="password"
+            id="caldav-password"
+            name="caldav_password"
+            class="form-control"
+            placeholder="{% if subscription and subscription.caldav_password_enc %}Stored encrypted — leave blank to keep{% else %}Password{% endif %}"
+            autocomplete="new-password"
+          >
+          <p class="form-hint">
+            Stored encrypted at rest.
+            {% if subscription and subscription.caldav_password_enc %}
+              Leave blank to keep the existing password.
+            {% endif %}
+          </p>
+        </div>
+
+      </div>
+      <!-- /caldav-fields -->
 
       <!-- Color -->
       <div class="form-group">
@@ -168,28 +258,51 @@
 </div>
 
 <script>
-  /* Keep the colour picker and hex text input in sync */
   (function () {
+    /* ---- Colour picker sync ---- */
     var picker = document.getElementById('sub-color');
     var text   = document.getElementById('sub-color-text');
-    if (!picker || !text) return;
+    if (picker && text) {
+      picker.addEventListener('input', function () { text.value = picker.value; });
+      text.addEventListener('input', function () {
+        var val = text.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(val)) { picker.value = val; }
+      });
+      picker.closest('form').addEventListener('submit', function () {
+        if (text.value.trim()) { picker.value = text.value.trim(); }
+      });
+    }
 
-    picker.addEventListener('input', function () {
-      text.value = picker.value;
-    });
+    /* ---- Subscription-type toggle ---- */
+    var icsRadio    = document.getElementById('type-ics');
+    var caldavRadio = document.getElementById('type-caldav');
+    var caldavFields   = document.getElementById('caldav-fields');
+    var urlLabelIcs    = document.getElementById('url-label-ics');
+    var urlLabelCaldav = document.getElementById('url-label-caldav');
+    var urlHintIcs     = document.getElementById('url-hint-ics');
+    var urlHintCaldav  = document.getElementById('url-hint-caldav');
+    var urlInput       = document.getElementById('sub-url');
 
-    text.addEventListener('input', function () {
-      var val = text.value.trim();
-      if (/^#[0-9a-fA-F]{6}$/.test(val)) {
-        picker.value = val;
+    function applyType(type) {
+      var isCalDAV = (type === 'caldav');
+      caldavFields.style.display   = isCalDAV ? '' : 'none';
+      urlLabelIcs.style.display    = isCalDAV ? 'none' : '';
+      urlLabelCaldav.style.display = isCalDAV ? '' : 'none';
+      urlHintIcs.style.display     = isCalDAV ? 'none' : '';
+      urlHintCaldav.style.display  = isCalDAV ? '' : 'none';
+      if (urlInput) {
+        urlInput.placeholder = isCalDAV
+          ? 'https://caldav.example.com/calendars/user/calendar/'
+          : 'https://calendar.example.com/feed.ics';
       }
-    });
+    }
 
-    picker.closest('form').addEventListener('submit', function () {
-      if (text.value.trim()) {
-        picker.value = text.value.trim();
-      }
-    });
+    if (icsRadio && caldavRadio) {
+      icsRadio.addEventListener('change',    function () { applyType('ics'); });
+      caldavRadio.addEventListener('change', function () { applyType('caldav'); });
+      // Apply immediately based on current checked state
+      applyType(caldavRadio.checked ? 'caldav' : 'ics');
+    }
   })();
 </script>
 {% endblock %}

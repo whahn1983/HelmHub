@@ -22,6 +22,11 @@
       {% else %}
         <span class="badge badge-sm" style="opacity: 0.6;">Disabled</span>
       {% endif %}
+      {% if subscription.is_caldav %}
+        <span class="badge badge-sm" style="background: var(--color-info, #0ea5e9); color: #fff;">CalDAV</span>
+      {% else %}
+        <span class="badge badge-sm" style="opacity: 0.55;">ICS</span>
+      {% endif %}
     </div>
 
     <div style="margin-top: var(--space-1); font-size: 0.8125rem; color: var(--text-muted);">

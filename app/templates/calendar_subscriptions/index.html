@@ -16,10 +16,11 @@
 <div class="settings-section card" style="margin-bottom: var(--space-4);">
   <div class="card-body">
     <p class="text-muted" style="margin: 0;">
-      Add external ICS/iCal calendar feeds here. Events from enabled subscriptions
-      will appear alongside your local events on the
+      Add external ICS/iCal feeds or CalDAV calendars here. Events from enabled
+      subscriptions will appear alongside your local events on the
       <a href="/events">Events</a> page and are read-only.
-      Subscription URLs are never exposed in the browser.
+      Subscription URLs and credentials are stored server-side only and never
+      exposed in the browser.
     </p>
   </div>
 </div>
@@ -44,6 +45,11 @@
                 <span class="badge badge-success badge-sm">Enabled</span>
               {% else %}
                 <span class="badge badge-sm" style="opacity: 0.6;">Disabled</span>
+              {% endif %}
+              {% if sub.is_caldav %}
+                <span class="badge badge-sm" style="background: var(--color-info, #0ea5e9); color: #fff;">CalDAV</span>
+              {% else %}
+                <span class="badge badge-sm" style="opacity: 0.55;">ICS</span>
               {% endif %}
             </div>
 
@@ -178,7 +184,8 @@
     </svg>
     <p class="empty-state-title">No calendar subscriptions yet</p>
     <p class="empty-state-body">
-      Subscribe to external ICS/iCal feeds (e.g. Google Calendar, iCloud, Outlook)
+      Subscribe to external ICS/iCal feeds or CalDAV calendars
+      (e.g. Google Calendar, iCloud, Nextcloud, Outlook)
       to see their events alongside your local events.
     </p>
     <a href="/calendar-subscriptions/new" class="btn btn-primary">Add a Subscription</a>

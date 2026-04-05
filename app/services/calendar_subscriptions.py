@@ -355,6 +355,9 @@ class CalDAVFetchMetadata:
     object_count_retrieved: int = 0
     event_count_parsed: int = 0
     detail: Optional[str] = None
+    resolved_calendar_url: Optional[str] = None
+    principal_url: Optional[str] = None
+    calendar_name: Optional[str] = None
 
 
 def _caldav_request_safe(
@@ -417,172 +420,20 @@ def fetch_caldav_events_with_metadata(
     subscription,
     lookahead_days: int = _DEFAULT_LOOKAHEAD_DAYS,
 ) -> tuple[list, Optional[datetime], CalDAVFetchMetadata]:
-    """
-    Fetch events from a CalDAV calendar URL and return a list of
-    :class:`SubscriptionEvent` objects plus an optional last-modified time.
+    """Fetch events via the high-level ``caldav`` library adapter."""
+    from app.services.caldav_subscriptions import refresh_caldav_subscription
 
-    Uses the CalDAV ``calendar-query`` REPORT to request only events within
-    the display window.  Falls back to a plain ``PROPFIND Depth: 1`` if the
-    server does not support REPORT (405/501).
-
-    SSRF protection is applied before every outbound request, including each
-    redirect hop, so server-controlled redirects cannot reach internal hosts.
-
-    Raises ``requests.RequestException`` on network/HTTP errors and
-    ``ValueError`` for protocol-level failures.
-    """
-    url = subscription.url
-    username = subscription.caldav_username or ''
-    password = subscription.caldav_password or ''
-
-    timeout = current_app.config.get(
-        'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', _DEFAULT_TIMEOUT_SECONDS
+    result = refresh_caldav_subscription(subscription, lookahead_days=lookahead_days)
+    meta = CalDAVFetchMetadata(
+        last_dav_method='CALDAV',
+        object_count_retrieved=result.item_count_retrieved,
+        event_count_parsed=len(result.events),
+        detail=result.detail,
+        resolved_calendar_url=result.resolved_calendar_url,
+        principal_url=result.principal_url,
+        calendar_name=result.calendar_name,
     )
-
-    now_utc = datetime.utcnow()
-    window_start = now_utc - timedelta(days=1)
-    window_end = now_utc + timedelta(days=lookahead_days)
-    start_str = window_start.strftime('%Y%m%dT%H%M%SZ')
-    end_str = window_end.strftime('%Y%m%dT%H%M%SZ')
-
-    query_xml = (
-        '<?xml version="1.0" encoding="utf-8" ?>'
-        '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
-        '<D:prop><D:getetag/><C:calendar-data/></D:prop>'
-        '<C:filter>'
-        '<C:comp-filter name="VCALENDAR">'
-        '<C:comp-filter name="VEVENT">'
-        f'<C:time-range start="{start_str}" end="{end_str}"/>'
-        '</C:comp-filter>'
-        '</C:comp-filter>'
-        '</C:filter>'
-        '</C:calendar-query>'
-    )
-
-    auth = (username, password) if username else None
-    headers = {
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Depth': '1',
-        'User-Agent': 'HelmHub-CalendarSubscription/1.0',
-    }
-
-    # Try REPORT first (standard CalDAV calendar-query).  SSRF is checked
-    # at every redirect hop inside _caldav_request_safe.
-    meta = CalDAVFetchMetadata(last_dav_method='REPORT')
-    response = _caldav_request_safe(
-        'REPORT', url, auth, headers, timeout,
-        body=query_xml.encode('utf-8'),
-    )
-    meta.last_http_status = response.status_code
-    meta.content_type = response.headers.get('Content-Type')
-
-    if response.status_code in (405, 501):
-        # Server does not support REPORT; fall back to PROPFIND
-        meta.last_dav_method = 'PROPFIND+GET'
-        ics_blobs, href_count = _caldav_propfind(url, auth, headers, timeout)
-        meta.href_count = href_count
-        meta.calendar_data_count = len(ics_blobs)
-        meta.object_count_retrieved = len(ics_blobs)
-        meta.response_kind = 'xml_multistatus'
-    else:
-        response.raise_for_status()
-        parsed_report = _parse_multistatus_calendar_data(response.text)
-        ics_blobs = parsed_report['calendar_data']
-        hrefs = parsed_report['hrefs']
-        meta.href_count = len(hrefs)
-        meta.calendar_data_count = len(ics_blobs)
-        meta.response_kind = (
-            'xml_multistatus'
-            if _looks_like_multistatus(response.text, meta.content_type)
-            else 'other'
-        )
-        if not ics_blobs and hrefs:
-            logger.info(
-                'CalDAV REPORT returned hrefs without calendar-data; '
-                'trying calendar-multiget for subscription %s',
-                subscription.id,
-            )
-            multiget_blobs = _caldav_multiget(url, auth, headers, timeout, hrefs)
-            if multiget_blobs:
-                meta.last_dav_method = 'REPORT+MULTIGET'
-                ics_blobs = multiget_blobs
-                meta.calendar_data_count = len(ics_blobs)
-        if not ics_blobs:
-            # Fallback for servers returning sparse/partial REPORT responses.
-            propfind_blobs, propfind_href_count = _caldav_propfind(
-                url, auth, headers, timeout
-            )
-            if propfind_blobs:
-                meta.last_dav_method = 'REPORT+PROPFIND+GET'
-                ics_blobs = propfind_blobs
-                meta.href_count = max(meta.href_count, propfind_href_count)
-                meta.calendar_data_count = len(ics_blobs)
-        if not ics_blobs:
-            # Some CalDAV deployments expose a direct ICS payload at the
-            # collection URL (no WebDAV object listing). Try a final GET.
-            raw_ics_blobs = _caldav_get_raw_ics(url, auth, timeout)
-            if raw_ics_blobs:
-                meta.last_dav_method = 'REPORT+GET'
-                ics_blobs = raw_ics_blobs
-                meta.calendar_data_count = len(ics_blobs)
-                meta.response_kind = 'ics'
-        meta.object_count_retrieved = len(ics_blobs)
-
-    if not ics_blobs:
-        logger.info(
-            'CalDAV REPORT for subscription %s returned no calendar objects',
-            subscription.id,
-        )
-        meta.detail = '0 calendar objects returned'
-
-    events: list[SubscriptionEvent] = []
-    seen_ids: set[str] = set()
-    latest_modified: Optional[datetime] = None
-
-    for blob in ics_blobs:
-        blob_bytes = blob.encode('utf-8') if isinstance(blob, str) else blob
-        try:
-            blob_events = parse_ics_events(
-                blob_bytes,
-                subscription,
-                lookahead_days=lookahead_days,
-            )
-            for ev in blob_events:
-                if ev.id not in seen_ids:
-                    seen_ids.add(ev.id)
-                    events.append(ev)
-            # Track latest source modification from ICS blobs
-            mod = _extract_ics_last_modified(blob_bytes)
-            if mod and (latest_modified is None or mod > latest_modified):
-                latest_modified = mod
-        except Exception as exc:
-            logger.warning(
-                'Skipping unparseable CalDAV calendar object in subscription %s: %s',
-                subscription.id,
-                exc,
-            )
-
-    events.sort(key=lambda e: e.start_at or datetime.min)
-    meta.event_count_parsed = len(events)
-    if meta.detail is None:
-        meta.detail = (
-            f'{meta.object_count_retrieved} objects retrieved, '
-            f'{meta.event_count_parsed} events parsed'
-        )
-    logger.info(
-        'CalDAV refresh subscription=%s method=%s status=%s content_type=%r '
-        'response_kind=%s hrefs=%s calendar_data=%s events=%s detail=%s',
-        subscription.id,
-        meta.last_dav_method,
-        meta.last_http_status,
-        meta.content_type,
-        meta.response_kind,
-        meta.href_count,
-        meta.calendar_data_count,
-        meta.event_count_parsed,
-        meta.detail,
-    )
-    return events, latest_modified, meta
+    return result.events, result.source_last_modified, meta
 
 
 def _caldav_propfind(
@@ -1185,7 +1036,27 @@ def refresh_subscription_events(
             http_status=caldav_meta.last_http_status if caldav_meta else None,
             dav_method=caldav_meta.last_dav_method if caldav_meta else 'GET',
             detail_msg=(
-                caldav_meta.detail if caldav_meta else f'{len(events)} events parsed'
+                (
+                    ' · '.join(
+                        part
+                        for part in [
+                            caldav_meta.detail,
+                            (
+                                f'calendar={caldav_meta.calendar_name}'
+                                if caldav_meta and caldav_meta.calendar_name
+                                else None
+                            ),
+                            (
+                                f'url={caldav_meta.resolved_calendar_url}'
+                                if caldav_meta and caldav_meta.resolved_calendar_url
+                                else None
+                            ),
+                        ]
+                        if part
+                    )
+                    if caldav_meta
+                    else f'OK — {len(events)} events parsed'
+                )
             ),
         )
         return events

@@ -205,6 +205,56 @@ def _parse_http_last_modified(value: Optional[str]) -> Optional[datetime]:
     return parsed
 
 
+def _extract_ics_last_modified(raw_ics: bytes) -> Optional[datetime]:
+    """
+    Return the best available source-modified timestamp from an ICS payload.
+
+    Priority:
+    1) VCALENDAR-level ``LAST-MODIFIED`` (overall feed metadata)
+    2) Most recent VEVENT-level ``LAST-MODIFIED`` across all events
+
+    Returns a naive UTC ``datetime`` or ``None`` when no valid timestamp is
+    available.
+    """
+    try:
+        from icalendar import Calendar
+    except ImportError:
+        logger.debug(
+            'icalendar package not installed; skipping ICS LAST-MODIFIED fallback'
+        )
+        return None
+
+    try:
+        cal = Calendar.from_ical(raw_ics)
+    except Exception as exc:
+        logger.debug('Could not parse ICS for LAST-MODIFIED fallback: %s', exc)
+        return None
+
+    calendar_last_modified = cal.get('LAST-MODIFIED')
+    if calendar_last_modified is not None:
+        try:
+            parsed, _ = _to_utc_naive(calendar_last_modified.dt)
+            return parsed
+        except Exception as exc:
+            logger.debug('Invalid VCALENDAR LAST-MODIFIED value: %s', exc)
+
+    latest_event_modified: Optional[datetime] = None
+    for component in cal.walk():
+        if component.name != 'VEVENT':
+            continue
+        event_last_modified = component.get('LAST-MODIFIED')
+        if event_last_modified is None:
+            continue
+        try:
+            parsed, _ = _to_utc_naive(event_last_modified.dt)
+        except Exception:
+            continue
+        if latest_event_modified is None or parsed > latest_event_modified:
+            latest_event_modified = parsed
+
+    return latest_event_modified
+
+
 def fetch_calendar_feed(url: str) -> tuple[bytes, Optional[datetime]]:
     """
     Fetch a remote ICS feed and return raw bytes + source last-modified time.
@@ -273,6 +323,8 @@ def fetch_calendar_feed(url: str) -> tuple[bytes, Optional[datetime]]:
     source_last_modified = _parse_http_last_modified(
         response.headers.get('Last-Modified')
     )
+    if source_last_modified is None:
+        source_last_modified = _extract_ics_last_modified(content)
     return content, source_last_modified
 
 

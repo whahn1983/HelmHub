@@ -563,6 +563,83 @@ class TestFetchCalendarFeed:
         assert content.startswith(b'BEGIN:VCALENDAR')
         assert source_modified == datetime(2015, 10, 21, 7, 28, 0)
 
+    def test_falls_back_to_vcalendar_last_modified_when_header_missing(self, app):
+        """Use VCALENDAR LAST-MODIFIED when HTTP Last-Modified is absent."""
+        from app.services.calendar_subscriptions import fetch_calendar_feed
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.is_redirect = False
+        mock_response.headers = {}
+        mock_response.content = textwrap.dedent("""\
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Test//Test//EN
+            LAST-MODIFIED:20260402T160000Z
+            BEGIN:VEVENT
+            UID:test-event-001@example.com
+            SUMMARY:Test Meeting
+            DTSTART:20990101T100000Z
+            DTEND:20990101T110000Z
+            END:VEVENT
+            END:VCALENDAR
+        """).encode()
+
+        with app.app_context():
+            with patch('requests.get', return_value=mock_response):
+                with patch(
+                    'app.services.calendar_subscriptions._assert_ssrf_safe',
+                    return_value=None,
+                ):
+                    _, source_modified = fetch_calendar_feed(
+                        'https://example.com/feed.ics'
+                    )
+
+        assert source_modified == datetime(2026, 4, 2, 16, 0, 0)
+
+    def test_falls_back_to_latest_event_last_modified_when_no_overall_modified(
+        self, app
+    ):
+        """Use newest VEVENT LAST-MODIFIED when no overall source date exists."""
+        from app.services.calendar_subscriptions import fetch_calendar_feed
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.is_redirect = False
+        mock_response.headers = {}
+        mock_response.content = textwrap.dedent("""\
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Test//Test//EN
+            BEGIN:VEVENT
+            UID:event-1@example.com
+            SUMMARY:First Event
+            DTSTART:20990101T100000Z
+            DTEND:20990101T110000Z
+            LAST-MODIFIED:20260401T100000Z
+            END:VEVENT
+            BEGIN:VEVENT
+            UID:event-2@example.com
+            SUMMARY:Second Event
+            DTSTART:20990102T100000Z
+            DTEND:20990102T110000Z
+            LAST-MODIFIED:20260403T123000Z
+            END:VEVENT
+            END:VCALENDAR
+        """).encode()
+
+        with app.app_context():
+            with patch('requests.get', return_value=mock_response):
+                with patch(
+                    'app.services.calendar_subscriptions._assert_ssrf_safe',
+                    return_value=None,
+                ):
+                    _, source_modified = fetch_calendar_feed(
+                        'https://example.com/feed.ics'
+                    )
+
+        assert source_modified == datetime(2026, 4, 3, 12, 30, 0)
+
 
 # ===========================================================================
 # Service: cache behaviour

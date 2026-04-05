@@ -2,12 +2,13 @@
 app/services/calendar_subscriptions.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Service module for ICS/iCal calendar subscription feeds.
+Service module for ICS/iCal and CalDAV calendar subscription feeds.
 
 Responsibilities
 ----------------
 - Fetch remote ICS feeds via HTTP (server-side only)
-- Parse ICS data into transient SubscriptionEvent objects
+- Fetch CalDAV calendar feeds via REPORT requests (server-side only)
+- Parse ICS/CalDAV data into transient SubscriptionEvent objects
 - Persist parsed subscription events in the database
 - Serve stale persisted data when refresh fails
 - Merge subscription events with local DB events for display
@@ -22,6 +23,7 @@ import ipaddress
 import logging
 import socket
 import threading
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -326,6 +328,268 @@ def fetch_calendar_feed(url: str) -> tuple[bytes, Optional[datetime]]:
     if source_last_modified is None:
         source_last_modified = _extract_ics_last_modified(content)
     return content, source_last_modified
+
+
+# ---------------------------------------------------------------------------
+# CalDAV fetch
+# ---------------------------------------------------------------------------
+
+# XML namespaces used in CalDAV REPORT responses
+_DAV_NS = 'DAV:'
+_CALDAV_NS = 'urn:ietf:params:xml:ns:caldav'
+
+
+_CALDAV_MAX_REDIRECTS = 10
+
+
+def _caldav_request_safe(
+    method: str,
+    url: str,
+    auth,
+    headers: dict,
+    timeout: int,
+    body: Optional[bytes] = None,
+) -> requests.Response:
+    """
+    Issue a single CalDAV/WebDAV HTTP request with manual redirect following
+    and per-hop SSRF protection.
+
+    Every redirect target is SSRF-checked before the next request is issued,
+    matching the same strategy used by :func:`fetch_calendar_feed`.
+
+    Raises ``ValueError`` for SSRF violations and
+    ``requests.RequestException`` for network/HTTP errors.
+    """
+    _assert_ssrf_safe(url)
+    current_url = url
+
+    for _ in range(_CALDAV_MAX_REDIRECTS + 1):
+        resp = requests.request(
+            method,
+            current_url,
+            data=body,
+            headers=headers,
+            auth=auth,
+            timeout=timeout,
+            allow_redirects=False,
+        )
+        if resp.is_redirect:
+            location = resp.headers.get('Location', '')
+            if not location:
+                break
+            current_url = urljoin(current_url, location)
+            _assert_ssrf_safe(current_url)
+        else:
+            return resp
+
+    raise requests.TooManyRedirects(
+        f'Exceeded {_CALDAV_MAX_REDIRECTS} redirects for {url}'
+    )
+
+
+def fetch_caldav_events(
+    subscription,
+    lookahead_days: int = _DEFAULT_LOOKAHEAD_DAYS,
+) -> tuple[list, Optional[datetime]]:
+    """
+    Fetch events from a CalDAV calendar URL and return a list of
+    :class:`SubscriptionEvent` objects plus an optional last-modified time.
+
+    Uses the CalDAV ``calendar-query`` REPORT to request only events within
+    the display window.  Falls back to a plain ``PROPFIND Depth: 1`` if the
+    server does not support REPORT (405/501).
+
+    SSRF protection is applied before every outbound request, including each
+    redirect hop, so server-controlled redirects cannot reach internal hosts.
+
+    Raises ``requests.RequestException`` on network/HTTP errors and
+    ``ValueError`` for protocol-level failures.
+    """
+    url = subscription.url
+    username = subscription.caldav_username or ''
+    password = subscription.caldav_password or ''
+
+    timeout = current_app.config.get(
+        'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS', _DEFAULT_TIMEOUT_SECONDS
+    )
+
+    now_utc = datetime.utcnow()
+    window_start = now_utc - timedelta(days=1)
+    window_end = now_utc + timedelta(days=lookahead_days)
+    start_str = window_start.strftime('%Y%m%dT%H%M%SZ')
+    end_str = window_end.strftime('%Y%m%dT%H%M%SZ')
+
+    query_xml = (
+        '<?xml version="1.0" encoding="utf-8" ?>'
+        '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+        '<D:prop><D:getetag/><C:calendar-data/></D:prop>'
+        '<C:filter>'
+        '<C:comp-filter name="VCALENDAR">'
+        '<C:comp-filter name="VEVENT">'
+        f'<C:time-range start="{start_str}" end="{end_str}"/>'
+        '</C:comp-filter>'
+        '</C:comp-filter>'
+        '</C:filter>'
+        '</C:calendar-query>'
+    )
+
+    auth = (username, password) if username else None
+    headers = {
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Depth': '1',
+        'User-Agent': 'HelmHub-CalendarSubscription/1.0',
+    }
+
+    # Try REPORT first (standard CalDAV calendar-query).  SSRF is checked
+    # at every redirect hop inside _caldav_request_safe.
+    response = _caldav_request_safe(
+        'REPORT', url, auth, headers, timeout,
+        body=query_xml.encode('utf-8'),
+    )
+
+    if response.status_code in (405, 501):
+        # Server does not support REPORT; fall back to PROPFIND
+        ics_blobs = _caldav_propfind(url, auth, headers, timeout)
+    else:
+        response.raise_for_status()
+        ics_blobs = _parse_multistatus_calendar_data(response.text)
+
+    if not ics_blobs:
+        logger.info(
+            'CalDAV REPORT for subscription %s returned no calendar objects',
+            subscription.id,
+        )
+
+    events: list[SubscriptionEvent] = []
+    seen_ids: set[str] = set()
+    latest_modified: Optional[datetime] = None
+
+    for blob in ics_blobs:
+        blob_bytes = blob.encode('utf-8') if isinstance(blob, str) else blob
+        try:
+            blob_events = parse_ics_events(
+                blob_bytes,
+                subscription,
+                lookahead_days=lookahead_days,
+            )
+            for ev in blob_events:
+                if ev.id not in seen_ids:
+                    seen_ids.add(ev.id)
+                    events.append(ev)
+            # Track latest source modification from ICS blobs
+            mod = _extract_ics_last_modified(blob_bytes)
+            if mod and (latest_modified is None or mod > latest_modified):
+                latest_modified = mod
+        except Exception as exc:
+            logger.warning(
+                'Skipping unparseable CalDAV calendar object in subscription %s: %s',
+                subscription.id,
+                exc,
+            )
+
+    events.sort(key=lambda e: e.start_at or datetime.min)
+    return events, latest_modified
+
+
+def _caldav_propfind(
+    url: str,
+    auth,
+    base_headers: dict,
+    timeout: int,
+) -> list[str]:
+    """
+    Issue a ``PROPFIND Depth: 1`` to list calendar objects, then fetch each
+    one and return the raw ICS text blobs.
+
+    Used as a fallback when the server does not support ``calendar-query``
+    REPORT (405/501).  Every request, including each individual ``.ics``
+    object fetch, uses :func:`_caldav_request_safe` so that server-controlled
+    redirects cannot bypass SSRF protection.
+
+    Returns a list of raw ICS strings (one per calendar object).
+    """
+    propfind_body = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<D:propfind xmlns:D="DAV:">'
+        '<D:prop><D:resourcetype/><D:getcontenttype/></D:prop>'
+        '</D:propfind>'
+    )
+    headers = dict(base_headers)
+    headers['Depth'] = '1'
+
+    resp = _caldav_request_safe(
+        'PROPFIND', url, auth, headers, timeout,
+        body=propfind_body.encode('utf-8'),
+    )
+    resp.raise_for_status()
+
+    hrefs = _extract_ics_hrefs(resp.text, url)
+
+    ics_blobs: list[str] = []
+    get_headers = {'User-Agent': base_headers['User-Agent']}
+    for href in hrefs[:500]:  # cap to avoid runaway
+        try:
+            r = _caldav_request_safe(
+                'GET', href, auth, get_headers, timeout,
+            )
+            if r.status_code == 200 and r.text.strip():
+                ics_blobs.append(r.text)
+        except Exception as exc:
+            logger.debug('Could not fetch CalDAV object %s: %s', href, exc)
+
+    return ics_blobs
+
+
+def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
+    """
+    Parse a PROPFIND multistatus response and return absolute hrefs that
+    appear to be .ics calendar objects.
+    """
+    hrefs = []
+    try:
+        root = ET.fromstring(multistatus_xml)
+        for response_el in root.iter(f'{{{_DAV_NS}}}response'):
+            href_el = response_el.find(f'{{{_DAV_NS}}}href')
+            if href_el is None or not href_el.text:
+                continue
+            href = href_el.text.strip()
+            # Include if it ends with .ics or content-type is text/calendar
+            content_type_el = response_el.find(
+                f'.//{{{_DAV_NS}}}getcontenttype'
+            )
+            content_type = (
+                content_type_el.text.lower()
+                if content_type_el is not None and content_type_el.text
+                else ''
+            )
+            if href.endswith('.ics') or 'calendar' in content_type:
+                hrefs.append(urljoin(base_url, href))
+    except ET.ParseError as exc:
+        logger.debug('Could not parse PROPFIND response XML: %s', exc)
+    return hrefs
+
+
+def _parse_multistatus_calendar_data(multistatus_xml: str) -> list[str]:
+    """
+    Extract all ``<C:calendar-data>`` text values from a CalDAV
+    multi-status XML response.
+
+    Returns a list of raw ICS strings (one per calendar object).
+    """
+    blobs: list[str] = []
+    if not multistatus_xml:
+        return blobs
+    try:
+        root = ET.fromstring(multistatus_xml)
+    except ET.ParseError as exc:
+        logger.warning('Could not parse CalDAV multi-status XML: %s', exc)
+        return blobs
+
+    for cal_data_el in root.iter(f'{{{_CALDAV_NS}}}calendar-data'):
+        if cal_data_el.text and cal_data_el.text.strip():
+            blobs.append(cal_data_el.text.strip())
+
+    return blobs
 
 
 # ---------------------------------------------------------------------------
@@ -685,8 +949,13 @@ def refresh_subscription_events(
     )
 
     try:
-        raw, source_last_modified = fetch_calendar_feed(subscription.url)
-        events = parse_ics_events(raw, subscription, lookahead_days=lookahead)
+        if getattr(subscription, 'subscription_type', 'ics') == 'caldav':
+            events, source_last_modified = fetch_caldav_events(
+                subscription, lookahead_days=lookahead
+            )
+        else:
+            raw, source_last_modified = fetch_calendar_feed(subscription.url)
+            events = parse_ics_events(raw, subscription, lookahead_days=lookahead)
         events = events[:max_events]
 
         new_entry = {
@@ -962,6 +1231,35 @@ def _assert_ssrf_safe(url: str) -> None:
 # ---------------------------------------------------------------------------
 # URL validation helper
 # ---------------------------------------------------------------------------
+
+def validate_caldav_url(url: str) -> Optional[str]:
+    """
+    Validate that *url* is an acceptable CalDAV calendar URL.
+
+    Returns an error message string on failure, or ``None`` on success.
+    """
+    if not url:
+        return 'CalDAV URL is required.'
+
+    normalised = url.strip()
+
+    try:
+        parsed = urlparse(normalised)
+    except Exception:
+        return 'URL could not be parsed.'
+
+    if parsed.scheme not in ('http', 'https'):
+        return 'CalDAV URL must use http:// or https:// scheme.'
+
+    if not parsed.netloc:
+        return 'URL must include a hostname.'
+
+    hostname = parsed.hostname or ''
+    if _host_resolves_to_private(hostname):
+        return 'URL must not point to a private or internal network address.'
+
+    return None
+
 
 def validate_subscription_url(url: str) -> Optional[str]:
     """

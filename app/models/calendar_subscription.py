@@ -79,6 +79,11 @@ class CalendarSubscription(db.Model):
     last_refresh_status = db.Column(db.String(64), nullable=True)   # 'ok' | 'error'
     # Parsed from the remote feed's HTTP Last-Modified header when present
     last_source_modified_at = db.Column(db.DateTime, nullable=True)
+    last_item_count_retrieved = db.Column(db.Integer, nullable=True)
+    last_item_count_parsed = db.Column(db.Integer, nullable=True)
+    last_http_status = db.Column(db.Integer, nullable=True)
+    last_dav_method = db.Column(db.String(32), nullable=True)
+    last_refresh_detail = db.Column(db.Text, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
 
     # ------------------------------------------------------------------

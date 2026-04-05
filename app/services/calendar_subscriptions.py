@@ -342,6 +342,21 @@ _CALDAV_NS = 'urn:ietf:params:xml:ns:caldav'
 _CALDAV_MAX_REDIRECTS = 10
 
 
+@dataclass
+class CalDAVFetchMetadata:
+    """Debug metadata recorded for each CalDAV refresh attempt."""
+
+    last_http_status: Optional[int] = None
+    last_dav_method: Optional[str] = None
+    content_type: Optional[str] = None
+    response_kind: Optional[str] = None   # xml_multistatus | ics | other
+    href_count: int = 0
+    calendar_data_count: int = 0
+    object_count_retrieved: int = 0
+    event_count_parsed: int = 0
+    detail: Optional[str] = None
+
+
 def _caldav_request_safe(
     method: str,
     url: str,
@@ -391,6 +406,17 @@ def fetch_caldav_events(
     subscription,
     lookahead_days: int = _DEFAULT_LOOKAHEAD_DAYS,
 ) -> tuple[list, Optional[datetime]]:
+    """Compatibility wrapper returning only events + last-modified."""
+    events, source_last_modified, _ = fetch_caldav_events_with_metadata(
+        subscription, lookahead_days=lookahead_days
+    )
+    return events, source_last_modified
+
+
+def fetch_caldav_events_with_metadata(
+    subscription,
+    lookahead_days: int = _DEFAULT_LOOKAHEAD_DAYS,
+) -> tuple[list, Optional[datetime], CalDAVFetchMetadata]:
     """
     Fetch events from a CalDAV calendar URL and return a list of
     :class:`SubscriptionEvent` objects plus an optional last-modified time.
@@ -442,23 +468,63 @@ def fetch_caldav_events(
 
     # Try REPORT first (standard CalDAV calendar-query).  SSRF is checked
     # at every redirect hop inside _caldav_request_safe.
+    meta = CalDAVFetchMetadata(last_dav_method='REPORT')
     response = _caldav_request_safe(
         'REPORT', url, auth, headers, timeout,
         body=query_xml.encode('utf-8'),
     )
+    meta.last_http_status = response.status_code
+    meta.content_type = response.headers.get('Content-Type')
 
     if response.status_code in (405, 501):
         # Server does not support REPORT; fall back to PROPFIND
-        ics_blobs = _caldav_propfind(url, auth, headers, timeout)
+        meta.last_dav_method = 'PROPFIND+GET'
+        ics_blobs, href_count = _caldav_propfind(url, auth, headers, timeout)
+        meta.href_count = href_count
+        meta.calendar_data_count = len(ics_blobs)
+        meta.object_count_retrieved = len(ics_blobs)
+        meta.response_kind = 'xml_multistatus'
     else:
         response.raise_for_status()
-        ics_blobs = _parse_multistatus_calendar_data(response.text)
+        parsed_report = _parse_multistatus_calendar_data(response.text)
+        ics_blobs = parsed_report['calendar_data']
+        hrefs = parsed_report['hrefs']
+        meta.href_count = len(hrefs)
+        meta.calendar_data_count = len(ics_blobs)
+        meta.response_kind = (
+            'xml_multistatus'
+            if _looks_like_multistatus(response.text, meta.content_type)
+            else 'other'
+        )
+        if not ics_blobs and hrefs:
+            logger.info(
+                'CalDAV REPORT returned hrefs without calendar-data; '
+                'trying calendar-multiget for subscription %s',
+                subscription.id,
+            )
+            multiget_blobs = _caldav_multiget(url, auth, headers, timeout, hrefs)
+            if multiget_blobs:
+                meta.last_dav_method = 'REPORT+MULTIGET'
+                ics_blobs = multiget_blobs
+                meta.calendar_data_count = len(ics_blobs)
+        if not ics_blobs:
+            # Fallback for servers returning sparse/partial REPORT responses.
+            propfind_blobs, propfind_href_count = _caldav_propfind(
+                url, auth, headers, timeout
+            )
+            if propfind_blobs:
+                meta.last_dav_method = 'REPORT+PROPFIND+GET'
+                ics_blobs = propfind_blobs
+                meta.href_count = max(meta.href_count, propfind_href_count)
+                meta.calendar_data_count = len(ics_blobs)
+        meta.object_count_retrieved = len(ics_blobs)
 
     if not ics_blobs:
         logger.info(
             'CalDAV REPORT for subscription %s returned no calendar objects',
             subscription.id,
         )
+        meta.detail = '0 calendar objects returned'
 
     events: list[SubscriptionEvent] = []
     seen_ids: set[str] = set()
@@ -488,7 +554,26 @@ def fetch_caldav_events(
             )
 
     events.sort(key=lambda e: e.start_at or datetime.min)
-    return events, latest_modified
+    meta.event_count_parsed = len(events)
+    if meta.detail is None:
+        meta.detail = (
+            f'{meta.object_count_retrieved} objects retrieved, '
+            f'{meta.event_count_parsed} events parsed'
+        )
+    logger.info(
+        'CalDAV refresh subscription=%s method=%s status=%s content_type=%r '
+        'response_kind=%s hrefs=%s calendar_data=%s events=%s detail=%s',
+        subscription.id,
+        meta.last_dav_method,
+        meta.last_http_status,
+        meta.content_type,
+        meta.response_kind,
+        meta.href_count,
+        meta.calendar_data_count,
+        meta.event_count_parsed,
+        meta.detail,
+    )
+    return events, latest_modified, meta
 
 
 def _caldav_propfind(
@@ -496,7 +581,7 @@ def _caldav_propfind(
     auth,
     base_headers: dict,
     timeout: int,
-) -> list[str]:
+) -> tuple[list[str], int]:
     """
     Issue a ``PROPFIND Depth: 1`` to list calendar objects, then fetch each
     one and return the raw ICS text blobs.
@@ -506,7 +591,7 @@ def _caldav_propfind(
     object fetch, uses :func:`_caldav_request_safe` so that server-controlled
     redirects cannot bypass SSRF protection.
 
-    Returns a list of raw ICS strings (one per calendar object).
+    Returns ``(ics_blobs, href_count)``.
     """
     propfind_body = (
         '<?xml version="1.0" encoding="utf-8"?>'
@@ -537,7 +622,47 @@ def _caldav_propfind(
         except Exception as exc:
             logger.debug('Could not fetch CalDAV object %s: %s', href, exc)
 
-    return ics_blobs
+    return ics_blobs, len(hrefs)
+
+
+def _caldav_multiget(
+    collection_url: str,
+    auth,
+    base_headers: dict,
+    timeout: int,
+    hrefs: list[str],
+) -> list[str]:
+    """Fetch object payloads with ``calendar-multiget`` REPORT."""
+    if not hrefs:
+        return []
+
+    href_xml = ''.join(
+        f'<D:href>{urljoin(collection_url, href)}</D:href>'
+        for href in hrefs[:500]
+    )
+    body = (
+        '<?xml version="1.0" encoding="utf-8" ?>'
+        '<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+        '<D:prop><D:getetag/><C:calendar-data/></D:prop>'
+        f'{href_xml}'
+        '</C:calendar-multiget>'
+    )
+    headers = dict(base_headers)
+    headers['Depth'] = '1'
+
+    resp = _caldav_request_safe(
+        'REPORT',
+        collection_url,
+        auth,
+        headers,
+        timeout,
+        body=body.encode('utf-8'),
+    )
+    if resp.status_code in (405, 501):
+        return []
+    resp.raise_for_status()
+    parsed = _parse_multistatus_calendar_data(resp.text)
+    return parsed['calendar_data']
 
 
 def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
@@ -569,27 +694,43 @@ def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
     return hrefs
 
 
-def _parse_multistatus_calendar_data(multistatus_xml: str) -> list[str]:
+def _looks_like_multistatus(payload: str, content_type: Optional[str]) -> bool:
+    ct = (content_type or '').lower()
+    if 'xml' in ct or 'dav' in ct:
+        return True
+    sample = (payload or '').lstrip()
+    return sample.startswith('<?xml') or '<multistatus' in sample
+
+
+def _parse_multistatus_calendar_data(multistatus_xml: str) -> dict:
     """
     Extract all ``<C:calendar-data>`` text values from a CalDAV
     multi-status XML response.
 
-    Returns a list of raw ICS strings (one per calendar object).
+    Returns a mapping with:
+    - ``calendar_data``: raw ICS strings extracted from ``calendar-data``
+    - ``hrefs``: all href values discovered in the multistatus payload
     """
     blobs: list[str] = []
+    hrefs: list[str] = []
     if not multistatus_xml:
-        return blobs
+        return {'calendar_data': blobs, 'hrefs': hrefs}
     try:
         root = ET.fromstring(multistatus_xml)
     except ET.ParseError as exc:
         logger.warning('Could not parse CalDAV multi-status XML: %s', exc)
-        return blobs
+        return {'calendar_data': blobs, 'hrefs': hrefs}
+
+    for href_el in root.iter(f'{{{_DAV_NS}}}href'):
+        if href_el.text and href_el.text.strip():
+            hrefs.append(href_el.text.strip())
 
     for cal_data_el in root.iter(f'{{{_CALDAV_NS}}}calendar-data'):
-        if cal_data_el.text and cal_data_el.text.strip():
-            blobs.append(cal_data_el.text.strip())
+        text = ''.join(cal_data_el.itertext()).strip()
+        if text:
+            blobs.append(text)
 
-    return blobs
+    return {'calendar_data': blobs, 'hrefs': hrefs}
 
 
 # ---------------------------------------------------------------------------
@@ -885,6 +1026,12 @@ def _update_db_status(
     error_msg: Optional[str],
     source_modified_at: Optional[datetime] = None,
     update_source_modified: bool = False,
+    *,
+    item_count_retrieved: Optional[int] = None,
+    item_count_parsed: Optional[int] = None,
+    http_status: Optional[int] = None,
+    dav_method: Optional[str] = None,
+    detail_msg: Optional[str] = None,
 ) -> None:
     """
     Best-effort update of the subscription's status columns.
@@ -903,6 +1050,11 @@ def _update_db_status(
             if update_source_modified:
                 sub.last_source_modified_at = source_modified_at
             sub.last_error = error_msg[:1000] if error_msg else None
+            sub.last_item_count_retrieved = item_count_retrieved
+            sub.last_item_count_parsed = item_count_parsed
+            sub.last_http_status = http_status
+            sub.last_dav_method = dav_method[:32] if dav_method else None
+            sub.last_refresh_detail = detail_msg[:1000] if detail_msg else None
             db.session.commit()
     except Exception:
         logger.exception(
@@ -949,8 +1101,9 @@ def refresh_subscription_events(
     )
 
     try:
+        caldav_meta: Optional[CalDAVFetchMetadata] = None
         if getattr(subscription, 'subscription_type', 'ics') == 'caldav':
-            events, source_last_modified = fetch_caldav_events(
+            events, source_last_modified, caldav_meta = fetch_caldav_events_with_metadata(
                 subscription, lookahead_days=lookahead
             )
         else:
@@ -972,16 +1125,45 @@ def refresh_subscription_events(
             None,
             source_modified_at=source_last_modified,
             update_source_modified=True,
+            item_count_retrieved=(
+                caldav_meta.object_count_retrieved if caldav_meta else len(events)
+            ),
+            item_count_parsed=len(events),
+            http_status=caldav_meta.last_http_status if caldav_meta else None,
+            dav_method=caldav_meta.last_dav_method if caldav_meta else 'GET',
+            detail_msg=(
+                caldav_meta.detail if caldav_meta else f'{len(events)} events parsed'
+            ),
         )
         return events
 
     except Exception as exc:
         err_msg = str(exc)
+        http_status = None
+        response = getattr(exc, 'response', None)
+        if response is not None:
+            try:
+                http_status = int(response.status_code)
+            except Exception:
+                http_status = None
         logger.error(
             'Failed to refresh subscription %s (%r): %s',
             subscription.id, subscription.name, err_msg,
         )
-        _update_db_status(subscription.id, 'error', err_msg)
+        _update_db_status(
+            subscription.id,
+            'error',
+            err_msg,
+            item_count_retrieved=0,
+            item_count_parsed=0,
+            http_status=http_status,
+            dav_method=(
+                'REPORT'
+                if getattr(subscription, 'subscription_type', 'ics') == 'caldav'
+                else 'GET'
+            ),
+            detail_msg=err_msg,
+        )
 
         stale = _read_cache(subscription.id)
         if stale is not None:

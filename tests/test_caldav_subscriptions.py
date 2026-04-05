@@ -472,24 +472,25 @@ class TestParseMultistatusCalendarData:
         """calendar-data elements are extracted from a valid multistatus response."""
         from app.services.calendar_subscriptions import _parse_multistatus_calendar_data
         with app.app_context():
-            blobs = _parse_multistatus_calendar_data(_CALDAV_MULTISTATUS)
-        assert len(blobs) == 1
-        assert 'BEGIN:VCALENDAR' in blobs[0]
-        assert 'CalDAV Meeting' in blobs[0]
+            parsed = _parse_multistatus_calendar_data(_CALDAV_MULTISTATUS)
+        assert len(parsed['calendar_data']) == 1
+        assert 'BEGIN:VCALENDAR' in parsed['calendar_data'][0]
+        assert 'CalDAV Meeting' in parsed['calendar_data'][0]
+        assert parsed['hrefs']
 
     def test_returns_empty_list_for_empty_input(self, app):
         """Empty input returns an empty list without raising."""
         from app.services.calendar_subscriptions import _parse_multistatus_calendar_data
         with app.app_context():
-            blobs = _parse_multistatus_calendar_data('')
-        assert blobs == []
+            parsed = _parse_multistatus_calendar_data('')
+        assert parsed == {'calendar_data': [], 'hrefs': []}
 
     def test_returns_empty_list_for_invalid_xml(self, app):
         """Malformed XML is handled gracefully and returns an empty list."""
         from app.services.calendar_subscriptions import _parse_multistatus_calendar_data
         with app.app_context():
-            blobs = _parse_multistatus_calendar_data('<not valid xml <<')
-        assert blobs == []
+            parsed = _parse_multistatus_calendar_data('<not valid xml <<')
+        assert parsed == {'calendar_data': [], 'hrefs': []}
 
     def test_returns_empty_list_when_no_calendar_data_elements(self, app):
         """A valid multistatus without calendar-data returns an empty list."""
@@ -501,8 +502,9 @@ class TestParseMultistatusCalendarData:
         )
         from app.services.calendar_subscriptions import _parse_multistatus_calendar_data
         with app.app_context():
-            blobs = _parse_multistatus_calendar_data(xml)
-        assert blobs == []
+            parsed = _parse_multistatus_calendar_data(xml)
+        assert parsed['calendar_data'] == []
+        assert parsed['hrefs'] == ['/cal/']
 
     def test_extracts_multiple_events(self, app):
         """Multiple calendar-data elements are all extracted."""
@@ -526,8 +528,8 @@ class TestParseMultistatusCalendarData:
         )
         from app.services.calendar_subscriptions import _parse_multistatus_calendar_data
         with app.app_context():
-            blobs = _parse_multistatus_calendar_data(xml)
-        assert len(blobs) == 2
+            parsed = _parse_multistatus_calendar_data(xml)
+        assert len(parsed['calendar_data']) == 2
 
 
 # ===========================================================================
@@ -644,7 +646,7 @@ class TestFetchCalDAVEvents:
             with patch.object(svc, '_caldav_request_safe',
                               return_value=report_405):
                 with patch.object(svc, '_caldav_propfind',
-                                  return_value=[]) as mock_propfind:
+                                  return_value=([], 0)) as mock_propfind:
                     with patch.object(svc, '_assert_ssrf_safe', return_value=None):
                         svc.fetch_caldav_events(sub, lookahead_days=60)
 
@@ -661,7 +663,7 @@ class TestFetchCalDAVEvents:
             with patch.object(svc, '_caldav_request_safe',
                               return_value=report_501):
                 with patch.object(svc, '_caldav_propfind',
-                                  return_value=[]) as mock_propfind:
+                                  return_value=([], 0)) as mock_propfind:
                     with patch.object(svc, '_assert_ssrf_safe', return_value=None):
                         svc.fetch_caldav_events(sub, lookahead_days=60)
 
@@ -773,6 +775,56 @@ class TestFetchCalDAVEvents:
         # De-duplicated: only one event
         assert len(events) == 1
 
+    def test_report_hrefs_without_calendar_data_uses_multiget(self, app):
+        """When REPORT returns hrefs without calendar-data we use multiget."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub()
+        report_only_hrefs = (
+            '<?xml version="1.0"?>'
+            '<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            '  <D:response><D:href>/cal/event1.ics</D:href></D:response>'
+            '</D:multistatus>'
+        )
+        mock_resp = self._make_mock_response(text=report_only_hrefs)
+
+        with app.app_context():
+            with patch.object(svc, '_caldav_request_safe', return_value=mock_resp):
+                with patch.object(svc, '_caldav_multiget',
+                                  return_value=[_CALDAV_VEVENT_ICS]) as mock_multiget:
+                    with patch.object(svc, '_caldav_propfind',
+                                      return_value=([], 0)) as mock_propfind:
+                        events, _, meta = svc.fetch_caldav_events_with_metadata(
+                            sub, lookahead_days=365 * 100
+                        )
+
+        assert len(events) == 1
+        assert meta.last_dav_method == 'REPORT+MULTIGET'
+        mock_multiget.assert_called_once()
+        mock_propfind.assert_not_called()
+
+    def test_metadata_reports_zero_objects(self, app):
+        """Zero-object responses set informative metadata detail."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub()
+        empty_ms = (
+            '<?xml version="1.0"?>'
+            '<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            '</D:multistatus>'
+        )
+        mock_resp = self._make_mock_response(text=empty_ms)
+
+        with app.app_context():
+            with patch.object(svc, '_caldav_request_safe', return_value=mock_resp):
+                with patch.object(svc, '_caldav_propfind', return_value=([], 0)):
+                    events, _, meta = svc.fetch_caldav_events_with_metadata(sub)
+
+        assert events == []
+        assert meta.object_count_retrieved == 0
+        assert meta.event_count_parsed == 0
+        assert meta.detail == '0 calendar objects returned'
+
 
 # ===========================================================================
 # Service: refresh dispatch (ics vs caldav)
@@ -816,7 +868,7 @@ class TestRefreshDispatch:
         with app.app_context():
             with patch.object(svc, 'fetch_calendar_feed',
                               return_value=(valid_ics, None)) as mock_ics:
-                with patch.object(svc, 'fetch_caldav_events') as mock_caldav:
+                with patch.object(svc, 'fetch_caldav_events_with_metadata') as mock_caldav:
                     with patch.object(svc, '_update_db_status'):
                         svc.refresh_subscription_events(sub, force=True)
 
@@ -832,8 +884,8 @@ class TestRefreshDispatch:
         svc.invalidate_cache(sub.id)
 
         with app.app_context():
-            with patch.object(svc, 'fetch_caldav_events',
-                              return_value=([], None)) as mock_caldav:
+            with patch.object(svc, 'fetch_caldav_events_with_metadata',
+                              return_value=([], None, svc.CalDAVFetchMetadata())) as mock_caldav:
                 with patch.object(svc, 'fetch_calendar_feed') as mock_ics:
                     with patch.object(svc, '_update_db_status'):
                         svc.refresh_subscription_events(sub, force=True)
@@ -866,7 +918,7 @@ class TestRefreshDispatch:
         })
 
         with app.app_context():
-            with patch.object(svc, 'fetch_caldav_events',
+            with patch.object(svc, 'fetch_caldav_events_with_metadata',
                               side_effect=Exception('CalDAV server down')):
                 with patch.object(svc, '_update_db_status'):
                     result = svc.get_cached_subscription_events(sub)
@@ -922,7 +974,7 @@ class TestCalDAVSecurity:
 
         with app.app_context():
             with patch.object(
-                svc, 'fetch_caldav_events',
+                svc, 'fetch_caldav_events_with_metadata',
                 side_effect=Exception('Connection refused to caldav.example.com'),
             ):
                 svc.refresh_subscription_events(sub, force=True)
@@ -992,7 +1044,7 @@ class TestCalDAVSecurity:
         with app.app_context():
             with patch.object(svc, 'fetch_calendar_feed',
                               return_value=(valid_ics, None)) as mock_ics:
-                with patch.object(svc, 'fetch_caldav_events') as mock_caldav:
+                with patch.object(svc, 'fetch_caldav_events_with_metadata') as mock_caldav:
                     with patch.object(svc, '_update_db_status'):
                         svc.refresh_subscription_events(sub, force=True)
 

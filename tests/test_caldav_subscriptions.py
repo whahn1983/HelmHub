@@ -147,6 +147,38 @@ class TestCaldavLibraryService:
 
 
 class TestRefreshAndStatusBehavior:
+    def test_missing_caldav_package_uses_http_fallback(self, app, db, test_user):
+        from app.services import calendar_subscriptions as svc
+
+        sub = _create_caldav_sub(
+            db,
+            test_user,
+            url='https://caldav.example.com/remote.php/dav/calendars/alice/work/',
+        )
+
+        with app.app_context():
+            with patch(
+                'app.services.caldav_subscriptions.refresh_caldav_subscription',
+                side_effect=RuntimeError(
+                    'CalDAV support requires the "caldav" package to be installed.'
+                ),
+            ):
+                with patch.object(
+                    svc,
+                    '_caldav_propfind',
+                    return_value=([TIMED_EVENT_ICS], 1),
+                ) as mock_propfind:
+                    events, source_last_modified, meta = (
+                        svc.fetch_caldav_events_with_metadata(sub, lookahead_days=365)
+                    )
+
+        mock_propfind.assert_called_once()
+        assert len(events) == 1
+        assert events[0].title == 'Timed Event'
+        assert source_last_modified is None
+        assert meta.last_dav_method == 'PROPFIND'
+        assert 'fallback sync' in (meta.detail or '')
+
     def test_refresh_materializes_rows_and_status_detail(self, app, db, test_user):
         from app.services import calendar_subscriptions as svc
 

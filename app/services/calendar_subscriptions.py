@@ -423,17 +423,82 @@ def fetch_caldav_events_with_metadata(
     """Fetch events via the high-level ``caldav`` library adapter."""
     from app.services.caldav_subscriptions import refresh_caldav_subscription
 
-    result = refresh_caldav_subscription(subscription, lookahead_days=lookahead_days)
-    meta = CalDAVFetchMetadata(
-        last_dav_method='CALDAV',
-        object_count_retrieved=result.item_count_retrieved,
-        event_count_parsed=len(result.events),
-        detail=result.detail,
-        resolved_calendar_url=result.resolved_calendar_url,
-        principal_url=result.principal_url,
-        calendar_name=result.calendar_name,
-    )
-    return result.events, result.source_last_modified, meta
+    try:
+        result = refresh_caldav_subscription(
+            subscription, lookahead_days=lookahead_days
+        )
+        meta = CalDAVFetchMetadata(
+            last_dav_method='CALDAV',
+            object_count_retrieved=result.item_count_retrieved,
+            event_count_parsed=len(result.events),
+            detail=result.detail,
+            resolved_calendar_url=result.resolved_calendar_url,
+            principal_url=result.principal_url,
+            calendar_name=result.calendar_name,
+        )
+        return result.events, result.source_last_modified, meta
+    except RuntimeError as exc:
+        # ``caldav`` package may be missing in some deployments. Fall back to
+        # the existing WebDAV/CalDAV HTTP fetcher so CalDAV sync still works.
+        if 'requires the "caldav" package' not in str(exc):
+            raise
+
+        timeout = current_app.config.get(
+            'CALENDAR_SUBSCRIPTION_FETCH_TIMEOUT_SECONDS',
+            _DEFAULT_TIMEOUT_SECONDS,
+        )
+        auth = (
+            (subscription.caldav_username or ''),
+            (subscription.caldav_password or ''),
+        )
+        base_headers = {
+            'User-Agent': 'HelmHub-CalendarSubscription/1.0',
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Depth': '1',
+        }
+
+        ics_blobs, href_count = _caldav_propfind(
+            subscription.url,
+            auth,
+            base_headers,
+            timeout,
+        )
+        if not ics_blobs:
+            ics_blobs = _caldav_get_raw_ics(subscription.url, auth, timeout)
+
+        events: list[SubscriptionEvent] = []
+        source_last_modified: Optional[datetime] = None
+        for blob in ics_blobs:
+            raw = blob.encode('utf-8', errors='ignore')
+            parsed = parse_ics_events(raw, subscription, lookahead_days=lookahead_days)
+            events.extend(parsed)
+            last_modified = _extract_ics_last_modified(raw)
+            if last_modified and (
+                source_last_modified is None or last_modified > source_last_modified
+            ):
+                source_last_modified = last_modified
+
+        deduped: dict[str, SubscriptionEvent] = {}
+        for ev in events:
+            deduped.setdefault(ev.id, ev)
+        final_events = sorted(
+            deduped.values(),
+            key=lambda e: e.start_at or datetime.min,
+        )
+        detail = (
+            f'OK — {len(final_events)} events imported (fallback sync)'
+            if final_events
+            else 'Warning — fallback sync resolved but no events in time window'
+        )
+        meta = CalDAVFetchMetadata(
+            last_dav_method='PROPFIND',
+            last_http_status=200 if ics_blobs else None,
+            object_count_retrieved=href_count if href_count else len(ics_blobs),
+            event_count_parsed=len(final_events),
+            detail=detail,
+            resolved_calendar_url=subscription.url,
+        )
+        return final_events, source_last_modified, meta
 
 
 def _caldav_propfind(

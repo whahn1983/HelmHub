@@ -162,6 +162,28 @@ class TestSubscriptionIndex:
         assert resp.status_code == 200
         assert b'No calendar subscriptions' in resp.data
 
+    def test_index_shows_source_modified_timestamp_when_available(
+        self, auth_client, db, test_user
+    ):
+        """The list page includes source modified status when refresh succeeded."""
+        source_modified = datetime(2026, 4, 5, 14, 30, 0)
+        _create_subscription(
+            db,
+            test_user,
+            name='Feed With Last-Modified',
+        )
+        sub = CalendarSubscription.query.filter_by(
+            user_id=test_user.id, name='Feed With Last-Modified'
+        ).first()
+        sub.last_refresh_at = datetime(2026, 4, 5, 14, 31, 0)
+        sub.last_refresh_status = 'ok'
+        sub.last_source_modified_at = source_modified
+        db.session.commit()
+
+        resp = auth_client.get('/calendar-subscriptions/')
+        assert resp.status_code == 200
+        assert b'source modified:' in resp.data
+
 
 # ===========================================================================
 # Route: Create subscription

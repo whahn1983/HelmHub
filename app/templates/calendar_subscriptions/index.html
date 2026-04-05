@@ -61,6 +61,16 @@
                 —
                 {% if sub.last_refresh_status == 'ok' %}
                   <span style="color: var(--color-success);">OK</span>
+                  {% if sub.last_source_modified_at %}
+                    — source modified:
+                    <time
+                      datetime="{{ sub.last_source_modified_at.isoformat() }}"
+                      class="js-local-datetime"
+                      data-utc="{{ sub.last_source_modified_at.isoformat() }}Z"
+                    >
+                      {{ sub.last_source_modified_at | format_datetime }}
+                    </time>
+                  {% endif %}
                 {% else %}
                   <span style="color: var(--color-danger);" title="{{ sub.last_error | e if sub.last_error else '' }}">Error</span>
                 {% endif %}

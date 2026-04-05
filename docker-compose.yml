@@ -17,6 +17,8 @@ services:
       retries: 10
 
   app:
+    build:
+      context: .
     image: whahn1983/helmhub:latest
     container_name: helmhub-app
     restart: unless-stopped

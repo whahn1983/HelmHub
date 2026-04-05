@@ -60,8 +60,8 @@ cp .env.example .env
 # 3. Edit .env and set strong secrets and admin credentials
 nano .env
 
-# 4. Start the application
-docker-compose up -d
+# 4. Build and start the application
+docker-compose up -d --build
 
 # Application is available at http://localhost:8080
 ```

@@ -238,6 +238,7 @@ class TestDashboardPage:
         assert f'data-utc=\"{expected_start}\"' in html
         assert f'data-utc=\"{expected_end}\"' in html
         assert 'js-local-time' in html
+        assert 'js-local-date' in html
 
     def test_dashboard_shows_overdue_count_when_overdue_tasks_exist(
         self, auth_client, db, test_user

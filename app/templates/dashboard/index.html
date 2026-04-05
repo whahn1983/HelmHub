@@ -227,6 +227,7 @@
             {% endif %}
           </div>
           <div class="event-details">
+            <span class="event-date js-local-date" data-utc="{{ next_event.start_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ next_event.start_at.strftime('%A, %b ') }}{{ next_event.start_at.day }}</span>
             <span class="event-title">{{ next_event.title }}</span>
             {% if next_is_sub %}
               <span class="event-source-label" title="From subscription: {{ next_event.source_name | e }}">
@@ -531,7 +532,19 @@
       minute: '2-digit'
     }).format(date);
   }
+  function toLocalDate(el) {
+    var isoUtc = el.getAttribute('data-utc');
+    if (!isoUtc) return;
+    var date = new Date(isoUtc);
+    if (isNaN(date.getTime())) return;
+    el.textContent = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric'
+    }).format(date);
+  }
   document.querySelectorAll('.js-local-time[data-utc]').forEach(toLocalTime);
+  document.querySelectorAll('.js-local-date[data-utc]').forEach(toLocalDate);
 
   // Greeting based on time
   function updateGreeting() {

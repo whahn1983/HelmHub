@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.calendar_subscription import CalendarSubscription
 
@@ -382,6 +383,65 @@ class TestSubscriptionToggle:
         sub = _create_subscription(db, other)
         resp = auth_client.post(f'/calendar-subscriptions/{sub.id}/toggle')
         assert resp.status_code == 404
+
+
+# ===========================================================================
+# Route: Manual refresh
+# ===========================================================================
+
+class TestSubscriptionRefresh:
+    def test_refresh_retries_lookup_after_session_error(
+        self, app, db, test_user
+    ):
+        """Refresh retries once when initial subscription lookup fails."""
+        from app.routes import calendar_subscriptions as routes
+
+        sub = _create_subscription(db, test_user, name='Retry Me')
+
+        with app.test_request_context('/calendar-subscriptions/1/refresh'):
+            with patch.object(
+                routes,
+                'current_user',
+                MagicMock(id=test_user.id),
+            ), patch(
+                'app.routes.calendar_subscriptions.db.session.get',
+                side_effect=[SQLAlchemyError('boom'), sub],
+            ) as mocked_get, patch(
+                'app.routes.calendar_subscriptions.db.session.rollback',
+            ) as mocked_rollback:
+                got = routes._sub_or_404(sub.id)
+
+        assert got.id == sub.id
+        assert mocked_get.call_count == 2
+        mocked_rollback.assert_called_once()
+
+    def test_refresh_returns_500_when_lookup_fails_twice(
+        self, app, db, test_user
+    ):
+        """Refresh returns 500 if subscription lookup repeatedly fails."""
+        from app.routes import calendar_subscriptions as routes
+        from werkzeug.exceptions import InternalServerError
+
+        sub = _create_subscription(db, test_user, name='Always Broken')
+
+        with app.test_request_context('/calendar-subscriptions/1/refresh'):
+            with patch.object(
+                routes,
+                'current_user',
+                MagicMock(id=test_user.id),
+            ), patch(
+                'app.routes.calendar_subscriptions.db.session.get',
+                side_effect=[
+                    SQLAlchemyError('boom-1'),
+                    SQLAlchemyError('boom-2'),
+                ],
+            ), patch(
+                'app.routes.calendar_subscriptions.db.session.rollback',
+            ) as mocked_rollback:
+                with pytest.raises(InternalServerError):
+                    routes._sub_or_404(sub.id)
+
+        assert mocked_rollback.call_count == 2
 
 
 # ===========================================================================

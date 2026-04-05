@@ -517,6 +517,15 @@ def fetch_caldav_events_with_metadata(
                 ics_blobs = propfind_blobs
                 meta.href_count = max(meta.href_count, propfind_href_count)
                 meta.calendar_data_count = len(ics_blobs)
+        if not ics_blobs:
+            # Some CalDAV deployments expose a direct ICS payload at the
+            # collection URL (no WebDAV object listing). Try a final GET.
+            raw_ics_blobs = _caldav_get_raw_ics(url, auth, timeout)
+            if raw_ics_blobs:
+                meta.last_dav_method = 'REPORT+GET'
+                ics_blobs = raw_ics_blobs
+                meta.calendar_data_count = len(ics_blobs)
+                meta.response_kind = 'ics'
         meta.object_count_retrieved = len(ics_blobs)
 
     if not ics_blobs:
@@ -665,6 +674,36 @@ def _caldav_multiget(
     return parsed['calendar_data']
 
 
+def _looks_like_ics_text(payload: str, content_type: Optional[str]) -> bool:
+    """Heuristic check for a raw ICS payload."""
+    ct = (content_type or '').lower()
+    if 'text/calendar' in ct or 'application/ics' in ct:
+        return True
+    sample = (payload or '').lstrip('\ufeff').lstrip().upper()
+    return sample.startswith('BEGIN:VCALENDAR')
+
+
+def _caldav_get_raw_ics(
+    url: str,
+    auth,
+    timeout: int,
+) -> list[str]:
+    """
+    Last-resort fallback for servers that expose calendar data directly via
+    GET at the configured URL instead of WebDAV object collections.
+    """
+    headers = {
+        'User-Agent': 'HelmHub-CalendarSubscription/1.0',
+        'Accept': 'text/calendar, application/ics, */*',
+    }
+    resp = _caldav_request_safe('GET', url, auth, headers, timeout)
+    if resp.status_code != 200:
+        return []
+    if not _looks_like_ics_text(resp.text, resp.headers.get('Content-Type')):
+        return []
+    return [resp.text]
+
+
 def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
     """
     Parse a PROPFIND multistatus response and return absolute hrefs that
@@ -678,7 +717,9 @@ def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
             if href_el is None or not href_el.text:
                 continue
             href = href_el.text.strip()
-            # Include if it ends with .ics or content-type is text/calendar
+            # Include if it ends with .ics or content-type is text/calendar.
+            # Some servers omit getcontenttype; in that case include any
+            # non-collection child resource as a potential calendar object.
             content_type_el = response_el.find(
                 f'.//{{{_DAV_NS}}}getcontenttype'
             )
@@ -687,7 +728,19 @@ def _extract_ics_hrefs(multistatus_xml: str, base_url: str) -> list[str]:
                 if content_type_el is not None and content_type_el.text
                 else ''
             )
-            if href.endswith('.ics') or 'calendar' in content_type:
+            resource_type_el = response_el.find(
+                f'.//{{{_DAV_NS}}}resourcetype'
+            )
+            is_collection = (
+                resource_type_el is not None and
+                resource_type_el.find(f'{{{_DAV_NS}}}collection') is not None
+            )
+            is_base_collection = href.rstrip('/') == urlparse(base_url).path.rstrip('/')
+            if (
+                href.endswith('.ics')
+                or 'calendar' in content_type
+                or (not is_collection and not is_base_collection)
+            ):
                 hrefs.append(urljoin(base_url, href))
     except ET.ParseError as exc:
         logger.debug('Could not parse PROPFIND response XML: %s', exc)

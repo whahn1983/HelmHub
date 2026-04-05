@@ -566,6 +566,28 @@ class TestExtractIcsHrefs:
             hrefs = _extract_ics_hrefs('<bad xml <<', 'https://example.com/')
         assert hrefs == []
 
+    def test_includes_non_collection_resources_without_content_type(self, app):
+        """Non-collection resources are included when type hints are absent."""
+        from app.services.calendar_subscriptions import _extract_ics_hrefs
+        xml = (
+            '<?xml version="1.0"?>'
+            '<D:multistatus xmlns:D="DAV:">'
+            '  <D:response>'
+            '    <D:href>/cal/</D:href>'
+            '    <D:propstat><D:prop><D:resourcetype><D:collection/>'
+            '    </D:resourcetype></D:prop></D:propstat>'
+            '  </D:response>'
+            '  <D:response>'
+            '    <D:href>/cal/object-without-extension</D:href>'
+            '    <D:propstat><D:prop><D:resourcetype/>'
+            '    </D:prop></D:propstat>'
+            '  </D:response>'
+            '</D:multistatus>'
+        )
+        with app.app_context():
+            hrefs = _extract_ics_hrefs(xml, 'https://caldav.example.com/cal/')
+        assert hrefs == ['https://caldav.example.com/cal/object-without-extension']
+
 
 # ===========================================================================
 # Service: fetch_caldav_events
@@ -824,6 +846,32 @@ class TestFetchCalDAVEvents:
         assert meta.object_count_retrieved == 0
         assert meta.event_count_parsed == 0
         assert meta.detail == '0 calendar objects returned'
+
+    def test_falls_back_to_get_when_no_webdav_objects(self, app):
+        """If REPORT/PROPFIND are empty but GET returns ICS, we parse it."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub()
+        empty_ms = (
+            '<?xml version="1.0"?>'
+            '<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            '</D:multistatus>'
+        )
+        mock_resp = self._make_mock_response(text=empty_ms)
+
+        with app.app_context():
+            with patch.object(svc, '_caldav_request_safe', return_value=mock_resp):
+                with patch.object(svc, '_caldav_propfind', return_value=([], 0)):
+                    with patch.object(
+                        svc, '_caldav_get_raw_ics', return_value=[_CALDAV_VEVENT_ICS]
+                    ) as mock_get:
+                        events, _, meta = svc.fetch_caldav_events_with_metadata(
+                            sub, lookahead_days=365 * 100
+                        )
+
+        assert len(events) == 1
+        assert meta.last_dav_method == 'REPORT+GET'
+        mock_get.assert_called_once()
 
 
 # ===========================================================================

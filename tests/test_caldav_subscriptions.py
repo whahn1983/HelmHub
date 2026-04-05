@@ -15,7 +15,7 @@ Tests for CalDAV calendar subscription support:
 
 import textwrap
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 
@@ -271,6 +271,20 @@ class TestCalDAVCreate:
             resp = _post_new_caldav(auth_client, password='')
         assert resp.status_code == 422
 
+    def test_create_triggers_background_refresh(self, auth_client):
+        """Successful create starts an async refresh to populate cached rows."""
+        with patch(
+            'app.services.calendar_subscriptions._host_resolves_to_private',
+            return_value=False,
+        ):
+            with patch(
+                'app.routes.calendar_subscriptions.refresh_subscription_events_background'
+            ) as mock_refresh:
+                resp = _post_new_caldav(auth_client, name='RefreshOnCreate')
+
+        assert resp.status_code in (301, 302)
+        mock_refresh.assert_called_once()
+
     def test_caldav_url_must_not_use_ftp(self, auth_client):
         """ftp:// CalDAV URL is rejected."""
         with patch(
@@ -387,6 +401,36 @@ class TestCalDAVEdit:
         resp = auth_client.get(f'/calendar-subscriptions/{sub.id}/edit')
         assert resp.status_code == 200
         assert b'CalDAV' in resp.data
+
+    def test_edit_enabled_subscription_triggers_background_refresh(
+        self, auth_client, db, test_user
+    ):
+        """Successful edit on enabled sub starts async refresh."""
+        with patch(
+            'app.services.calendar_subscriptions._host_resolves_to_private',
+            return_value=False,
+        ):
+            sub = _create_caldav_sub(db, test_user, name='RefreshOnEdit')
+
+        with patch(
+            'app.services.calendar_subscriptions._host_resolves_to_private',
+            return_value=False,
+        ):
+            with patch(
+                'app.routes.calendar_subscriptions.refresh_subscription_events_background'
+            ) as mock_refresh:
+                resp = _post_edit_caldav(
+                    auth_client,
+                    sub.id,
+                    name='RefreshOnEdit Updated',
+                    url='https://caldav.example.com/calendars/user/updated/',
+                    username='alice@example.com',
+                    password='',
+                    enabled='on',
+                )
+
+        assert resp.status_code in (301, 302)
+        mock_refresh.assert_called_once_with(sub.id, ANY)
 
 
 # ===========================================================================

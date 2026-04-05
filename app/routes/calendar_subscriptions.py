@@ -199,6 +199,17 @@ def new():
         db.session.add(sub)
         db.session.commit()
 
+        # Prime cache immediately so users see imported events without needing
+        # to hit dashboard/events first.
+        try:
+            refresh_subscription_events_background(
+                sub.id, current_app._get_current_object()
+            )
+        except Exception:
+            logger.exception(
+                'Failed to start initial refresh for subscription %s', sub.id
+            )
+
         flash(f'Subscription \u201c{sub.name}\u201d added.', 'success')
         return redirect(url_for('cal_subs.index'))
 
@@ -260,6 +271,18 @@ def edit(sub_id: int):
         # Invalidate cache when URL changes so the new feed is fetched fresh
         if url_changed:
             invalidate_cache(sub.id)
+
+        # If the subscription is enabled, trigger a refresh after edits so
+        # updated credentials/URL changes repopulate cached events promptly.
+        if sub.enabled:
+            try:
+                refresh_subscription_events_background(
+                    sub.id, current_app._get_current_object()
+                )
+            except Exception:
+                logger.exception(
+                    'Failed to start refresh after edit for subscription %s', sub.id
+                )
 
         flash(f'Subscription \u201c{sub.name}\u201d updated.', 'success')
         return redirect(url_for('cal_subs.index'))

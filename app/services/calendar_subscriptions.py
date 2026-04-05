@@ -1069,7 +1069,13 @@ def refresh_subscription_events_background(subscription_id: int, app) -> None:
                 from app.extensions import db  # noqa: PLC0415
                 sub = db.session.get(CalendarSubscription, subscription_id)
                 if sub:
-                    refresh_subscription_events(sub, force=True)
+                    try:
+                        refresh_subscription_events(sub, force=True)
+                    except Exception:
+                        logger.exception(
+                            'Background refresh failed for subscription %s',
+                            subscription_id,
+                        )
         finally:
             with _refresh_inflight_lock:
                 _refresh_inflight.discard(subscription_id)

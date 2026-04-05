@@ -18,6 +18,7 @@ from flask import (
     request, flash, abort, make_response, current_app,
 )
 from flask_login import login_required, current_user
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
 from app.models.calendar_subscription import CalendarSubscription
@@ -45,7 +46,24 @@ def _is_htmx() -> bool:
 
 def _sub_or_404(sub_id: int) -> CalendarSubscription:
     """Return the subscription owned by current_user or abort 404."""
-    sub = db.session.get(CalendarSubscription, sub_id)
+    try:
+        sub = db.session.get(CalendarSubscription, sub_id)
+    except SQLAlchemyError:
+        # Recover from broken transaction/connection state that can leak into
+        # this request (e.g. closed result/cursor edge cases). Roll back and
+        # retry once before surfacing a 500.
+        db.session.rollback()
+        logger.exception(
+            'Database lookup failed for subscription %s; retrying once.', sub_id
+        )
+        try:
+            sub = db.session.get(CalendarSubscription, sub_id)
+        except SQLAlchemyError:
+            db.session.rollback()
+            logger.exception(
+                'Database lookup failed again for subscription %s.', sub_id
+            )
+            abort(500)
     if sub is None or sub.user_id != current_user.id:
         abort(404)
     return sub

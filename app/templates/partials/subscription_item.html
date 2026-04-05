@@ -43,7 +43,11 @@
         {% if subscription.last_refresh_status == 'ok' %}
           <span style="color: var(--color-success);">OK</span>
           {% if subscription.last_refresh_detail %}
-            — {{ subscription.last_refresh_detail | e }}
+            {% set display_detail = subscription.last_refresh_detail %}
+            {% if display_detail[:5] == 'OK — ' %}
+              {% set display_detail = display_detail[5:] %}
+            {% endif %}
+            — {{ display_detail | e }}
           {% endif %}
           {% if subscription.last_source_modified_at %}
             — source modified:

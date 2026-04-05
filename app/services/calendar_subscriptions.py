@@ -1111,11 +1111,6 @@ def refresh_subscription_events(
                                 if caldav_meta and caldav_meta.calendar_name
                                 else None
                             ),
-                            (
-                                f'url={caldav_meta.resolved_calendar_url}'
-                                if caldav_meta and caldav_meta.resolved_calendar_url
-                                else None
-                            ),
                         ]
                         if part
                     )

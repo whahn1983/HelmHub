@@ -894,6 +894,37 @@ class TestCacheBehaviour:
         svc.invalidate_cache(sub.id)
         assert svc._read_cache(sub.id) is None
 
+    def test_caldav_status_detail_omits_resolved_url(self, app, db, test_user):
+        """CalDAV refresh status detail should not include the resolved URL."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(db, test_user, sub_id=909)
+        sub.subscription_type = 'caldav'
+        db.session.add(sub)
+        db.session.commit()
+
+        meta = svc.CalDAVFetchMetadata(
+            detail='OK — 1 events parsed',
+            calendar_name='Team Calendar',
+            resolved_calendar_url='https://cal.example.com/calendars/team/',
+            object_count_retrieved=1,
+            last_dav_method='REPORT',
+        )
+
+        with app.app_context():
+            with patch.object(
+                svc,
+                'fetch_caldav_events_with_metadata',
+                return_value=([self._fake_event('sub_909_1')], None, meta),
+            ):
+                with patch.object(svc, '_update_db_status') as mock_update:
+                    svc.refresh_subscription_events(sub, force=True)
+
+        detail_msg = mock_update.call_args.kwargs.get('detail_msg')
+        assert 'calendar=Team Calendar' in detail_msg
+        assert 'url=' not in detail_msg
+        svc.invalidate_cache(sub.id)
+
     def test_get_cached_events_or_refresh_on_miss_uses_cache(self, app, db, test_user):
         """The warmup helper does not refresh when cache is already present."""
         from app.services import calendar_subscriptions as svc

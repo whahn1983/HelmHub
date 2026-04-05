@@ -23,7 +23,8 @@ import logging
 import socket
 import threading
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.parse import urlparse, urljoin
 
@@ -189,9 +190,24 @@ def invalidate_cache(subscription_id: int) -> None:
 # HTTP fetch
 # ---------------------------------------------------------------------------
 
-def fetch_calendar_feed(url: str) -> bytes:
+def _parse_http_last_modified(value: Optional[str]) -> Optional[datetime]:
+    """Parse an HTTP Last-Modified header into a naive UTC datetime."""
+    if not value:
+        return None
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def fetch_calendar_feed(url: str) -> tuple[bytes, Optional[datetime]]:
     """
-    Fetch a remote ICS feed and return the raw bytes.
+    Fetch a remote ICS feed and return raw bytes + source last-modified time.
 
     Raises ``requests.RequestException`` on network/HTTP errors and
     ``ValueError`` for obviously invalid responses.
@@ -254,7 +270,10 @@ def fetch_calendar_feed(url: str) -> bytes:
             '(missing BEGIN:VCALENDAR).'
         )
 
-    return content
+    source_last_modified = _parse_http_last_modified(
+        response.headers.get('Last-Modified')
+    )
+    return content, source_last_modified
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +564,11 @@ def _row_to_event(row: SubscriptionEventRow) -> SubscriptionEvent:
 
 
 def _update_db_status(
-    subscription_id: int, status: str, error_msg: Optional[str]
+    subscription_id: int,
+    status: str,
+    error_msg: Optional[str],
+    source_modified_at: Optional[datetime] = None,
+    update_source_modified: bool = False,
 ) -> None:
     """
     Best-effort update of the subscription's status columns.
@@ -561,6 +584,8 @@ def _update_db_status(
         if sub:
             sub.last_refresh_at = datetime.utcnow()
             sub.last_refresh_status = status
+            if update_source_modified:
+                sub.last_source_modified_at = source_modified_at
             sub.last_error = error_msg[:1000] if error_msg else None
             db.session.commit()
     except Exception:
@@ -608,7 +633,7 @@ def refresh_subscription_events(
     )
 
     try:
-        raw = fetch_calendar_feed(subscription.url)
+        raw, source_last_modified = fetch_calendar_feed(subscription.url)
         events = parse_ics_events(raw, subscription, lookahead_days=lookahead)
         events = events[:max_events]
 
@@ -620,7 +645,13 @@ def refresh_subscription_events(
             'error': None,
         }
         _write_cache(subscription.id, new_entry)
-        _update_db_status(subscription.id, 'ok', None)
+        _update_db_status(
+            subscription.id,
+            'ok',
+            None,
+            source_modified_at=source_last_modified,
+            update_source_modified=True,
+        )
         return events
 
     except Exception as exc:

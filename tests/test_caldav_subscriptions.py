@@ -201,6 +201,25 @@ class TestCaldavLazyImport:
 
 
 class TestRefreshAndStatusBehavior:
+
+
+    def test_refresh_uses_one_day_backfill_window(self, app, db, test_user):
+        from app.services import caldav_subscriptions as svc
+
+        sub = _create_caldav_sub(db, test_user)
+
+        with app.app_context():
+            with patch.object(svc, 'fetch_caldav_events') as mock_fetch:
+                mock_fetch.return_value = SimpleNamespace()
+                svc.refresh_caldav_subscription(sub, lookahead_days=365)
+
+        kwargs = mock_fetch.call_args.kwargs
+        start = kwargs['start']
+        end = kwargs['end']
+        assert end > start
+        # lookahead + 1-day backfill to include ongoing/all-day events.
+        assert (end - start).days == 366
+
     def test_missing_caldav_package_uses_http_fallback(self, app, db, test_user):
         from app.services import calendar_subscriptions as svc
 

@@ -173,7 +173,9 @@ def fetch_caldav_events(
 def refresh_caldav_subscription(subscription, lookahead_days: int) -> CaldavFetchResult:
     """End-to-end CalDAV refresh helper used by the calendar subscription service."""
     now_utc = datetime.utcnow()
-    window_start = now_utc
+    # Mirror parse_ics_events window behavior so ongoing/all-day events
+    # that started earlier today are still considered during refresh.
+    window_start = now_utc - timedelta(days=1)
     window_end = now_utc + timedelta(days=lookahead_days)
     return fetch_caldav_events(
         subscription,

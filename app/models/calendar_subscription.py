@@ -67,6 +67,8 @@ class CalendarSubscription(db.Model):
     # Feed refresh status — updated by the service layer after each attempt
     last_refresh_at = db.Column(db.DateTime, nullable=True)
     last_refresh_status = db.Column(db.String(64), nullable=True)   # 'ok' | 'error'
+    # Parsed from the remote feed's HTTP Last-Modified header when present
+    last_source_modified_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
 
     # ------------------------------------------------------------------

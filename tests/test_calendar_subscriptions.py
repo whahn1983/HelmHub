@@ -518,6 +518,29 @@ class TestFetchCalendarFeed:
                 call_url = mock_get.call_args[0][0]
                 assert call_url.startswith('https://')
 
+    def test_extracts_last_modified_header(self, app):
+        """Last-Modified header is parsed and returned with payload."""
+        from app.services.calendar_subscriptions import fetch_calendar_feed
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.content = b'BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n'
+        mock_response.is_redirect = False
+        mock_response.headers = {'Last-Modified': 'Wed, 21 Oct 2015 07:28:00 GMT'}
+
+        with app.app_context():
+            with patch('requests.get', return_value=mock_response):
+                with patch(
+                    'app.services.calendar_subscriptions._assert_ssrf_safe',
+                    return_value=None,
+                ):
+                    content, source_modified = fetch_calendar_feed(
+                        'https://example.com/feed.ics'
+                    )
+
+        assert content.startswith(b'BEGIN:VCALENDAR')
+        assert source_modified == datetime(2015, 10, 21, 7, 28, 0)
+
 
 # ===========================================================================
 # Service: cache behaviour
@@ -585,7 +608,7 @@ class TestCacheBehaviour:
         svc.invalidate_cache(sub.id)
 
         with app.app_context():
-            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+            with patch.object(svc, 'fetch_calendar_feed', return_value=(_VALID_ICS, None)):
                 with patch.object(svc, '_update_db_status'):
                     result = svc.get_cached_subscription_events(sub)
 
@@ -607,7 +630,7 @@ class TestCacheBehaviour:
         })
 
         with app.app_context():
-            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+            with patch.object(svc, 'fetch_calendar_feed', return_value=(_VALID_ICS, None)):
                 with patch.object(svc, '_update_db_status'):
                     result = svc.get_cached_subscription_events(sub)
 
@@ -670,10 +693,35 @@ class TestCacheBehaviour:
         })
 
         with app.app_context():
-            with patch.object(svc, 'fetch_calendar_feed', return_value=_VALID_ICS):
+            with patch.object(svc, 'fetch_calendar_feed', return_value=(_VALID_ICS, None)):
                 with patch.object(svc, '_update_db_status'):
                     svc.refresh_subscription_events(sub, force=True)
 
+        svc.invalidate_cache(sub.id)
+
+    def test_success_status_update_includes_source_modified(self, app, db, test_user):
+        """Successful refresh forwards source Last-Modified to status updater."""
+        from app.services import calendar_subscriptions as svc
+
+        sub = self._make_sub(db, test_user, sub_id=907)
+        source_modified = datetime(2026, 1, 2, 3, 4, 5)
+
+        with app.app_context():
+            with patch.object(
+                svc,
+                'fetch_calendar_feed',
+                return_value=(_VALID_ICS, source_modified),
+            ):
+                with patch.object(svc, '_update_db_status') as mock_update:
+                    svc.refresh_subscription_events(sub, force=True)
+
+        mock_update.assert_called_once_with(
+            sub.id,
+            'ok',
+            None,
+            source_modified_at=source_modified,
+            update_source_modified=True,
+        )
         svc.invalidate_cache(sub.id)
 
     def test_invalidate_cache_removes_entry(self, app, db, test_user):

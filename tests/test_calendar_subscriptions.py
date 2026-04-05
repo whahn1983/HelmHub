@@ -831,3 +831,67 @@ class TestEventsPageWithSubscriptions:
             resp = auth_client.get('/events/')
 
         assert resp.status_code == 200
+
+    def test_subscription_events_view_ignores_blank_title(self, auth_client):
+        """Blank-title subscription rows are ignored by the events merge."""
+        from app.services import calendar_subscriptions as svc
+        from app.services.calendar_subscriptions import SubscriptionEvent
+
+        valid = SubscriptionEvent(
+            id='sub_2_real',
+            title='Legit Event',
+            start_at=datetime.utcnow() + timedelta(hours=2),
+            source_type='subscription',
+            source_id=2,
+            source_name='Work Sub',
+        )
+        blank = SubscriptionEvent(
+            id='sub_2_blank',
+            title='   ',
+            start_at=datetime.utcnow() + timedelta(hours=1),
+            source_type='subscription',
+            source_id=2,
+            source_name='Work Sub',
+        )
+        with patch.object(svc, 'get_user_calendar_subscriptions',
+                          return_value=[MagicMock(id=2)]):
+            with patch.object(svc, 'get_cached_events_stale_ok',
+                              return_value=[blank, valid]), \
+                 patch.object(svc, 'is_cache_stale', return_value=False):
+                resp = auth_client.get('/events/?view=all')
+
+        assert resp.status_code == 200
+        assert b'Legit Event' in resp.data
+        assert b'sub_2_blank' not in resp.data
+
+    def test_subscription_events_view_all_ignores_out_of_window(self, auth_client):
+        """Ancient cached subscription rows are not rendered in view=all."""
+        from app.services import calendar_subscriptions as svc
+        from app.services.calendar_subscriptions import SubscriptionEvent
+
+        in_window = SubscriptionEvent(
+            id='sub_2_in_window',
+            title='Current Event',
+            start_at=datetime.utcnow() + timedelta(days=2),
+            source_type='subscription',
+            source_id=2,
+            source_name='Work Sub',
+        )
+        old = SubscriptionEvent(
+            id='sub_2_old',
+            title='Old Artifact',
+            start_at=datetime.utcnow() - timedelta(days=1800),
+            source_type='subscription',
+            source_id=2,
+            source_name='Work Sub',
+        )
+        with patch.object(svc, 'get_user_calendar_subscriptions',
+                          return_value=[MagicMock(id=2)]):
+            with patch.object(svc, 'get_cached_events_stale_ok',
+                              return_value=[old, in_window]), \
+                 patch.object(svc, 'is_cache_stale', return_value=False):
+                resp = auth_client.get('/events/?view=all')
+
+        assert resp.status_code == 200
+        assert b'Current Event' in resp.data
+        assert b'Old Artifact' not in resp.data
